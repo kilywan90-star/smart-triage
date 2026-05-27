@@ -612,9 +612,16 @@ let avatarMode = localStorage.getItem('avatar_mode') || 'basic';
 let conversation = [], isProcessing = false, questionCount = 0, collectedSymptoms = [];
 const MIN_QUESTIONS = 3;
 let consultCount = parseInt(localStorage.getItem('consult_count')||'0');
+let currentAudio = null; // Track playing TTS audio
+
+function stopAllSpeech() {
+  if (synth) synth.cancel();
+  if (currentAudio) { currentAudio.pause(); currentAudio.src = ''; currentAudio = null; }
+}
 
 // ==================== Tab Navigation ====================
 function switchTab(tab) {
+  stopAllSpeech();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
@@ -646,6 +653,7 @@ function setAvatarMode(mode) {
   applyModeVisuals();
 }
 function toggleAvatarMode() {
+  stopAllSpeech();
   setAvatarMode(avatarMode === 'basic' ? 'digital' : 'basic');
   addSystemMsg(avatarMode==='digital'?'已切换数字医生分身模式。我会通过3轮问诊了解您的病情。':'已切换基础导诊模式。');
   scrollChat();
@@ -740,6 +748,7 @@ function escapeHtml(text) {
 
 // ==================== Quick Actions ====================
 function handleQuickAction(type) {
+  stopAllSpeech();
   const actions = {
     register: { title:'📋 挂号指引', content:`在线预约挂号流程：\n\n1. 微信搜索"健康高新"或各医院公众号 → 选科室 → 选医生 → 预约\n2. 下载"华医通"APP(华西系) → 在线建档 → 预约挂号\n3. 现场挂号：携带身份证/社保卡 → 医院自助机或窗口\n4. 电话预约：拨打推荐医院电话\n\n提示：专家号建议提前3-7天预约。` },
     payment: { title:'💳 缴费流程', content:`门诊/住院缴费方式：\n\n1. 诊间支付：医生开单后直接扫码支付(微信/支付宝)\n2. 自助机缴费：医院各楼层自助机支付\n3. 窗口缴费：收费窗口现金/刷卡/扫码\n4. 线上缴费：医院APP/公众号 → "门诊缴费"\n\n医保报销：缴费时出示医保卡/电子医保码，系统自动结算。` },
@@ -1124,6 +1133,7 @@ function quickDial(tel) {
 // ==================== Core Flow ====================
 async function sendMsg(text) {
   if(isProcessing)return;
+  stopAllSpeech();
   const input=document.getElementById('userInput');
   const btn=document.getElementById('btnSend');
   const msg=text||input.value.trim();
@@ -1393,7 +1403,7 @@ async function speakText(text) {
   if (dashKey) {
     try {
       const audioUrl = await dashscopeTTS(cleanText, dashKey);
-      if (audioUrl) { const audio = new Audio(audioUrl); audio.play().catch(()=>{}); return; }
+      if (audioUrl) { stopAllSpeech(); currentAudio = new Audio(audioUrl); currentAudio.play().catch(()=>{}); return; }
     } catch(e) { console.log('TTS fallback to browser:', e.message); }
   }
   browserTTS(cleanText);
