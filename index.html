@@ -1792,8 +1792,8 @@ function browserTTS(cleanText) {
 
 // Override addMsg to auto-speak doctor responses
 const _originalAddMsg = addMsg;
-addMsg = function(role, text, isHtml) {
-  const result = _originalAddMsg(role, text, isHtml);
+addMsg = function(role, text, isHtml, choices, choiceCb) {
+  const result = _originalAddMsg(role, text, isHtml, choices, choiceCb);
   if (role === 'doctor') {
     const content = isHtml ? text : (typeof text === 'string' ? text : '');
     if (content && content.length > 2 && content.length < 800) {
