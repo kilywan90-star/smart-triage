@@ -1196,15 +1196,35 @@ function getAllDeptEntries() {
 }
 function calcSimilarity(input, entry) {
   const d=entry.department,h=entry.hospital; let s=0;
-  const kw=[d.n,d.k,d.d].join(' ').toLowerCase();
-  const words=kw.split(/[\s,，、/]+/).filter(w=>w.length>=2);
-  let hits=0; for(const w of words){if(input.includes(w))hits+=w.length;}
-  s+=(hits/Math.max(kw.length,1))*40;
+
+  // 1) Rule engine match (most weight - 50%)
   const rule=triageByRules(input);
-  if(rule){if(d.k===rule.dk||d.n.includes(rule.dept))s+=30;else if(d.k.includes(rule.dk?.slice(0,2))||rule.dk?.includes(d.k?.slice(0,2)))s+=15;}
-  if(h.lk==='3a')s+=15;else if(h.lk==='3')s+=12;else if(h.lk==='2')s+=8;else s+=5;
-  s+=Math.min(d.dr.length*4,10);
-  if(rule&&d.k===rule.dk)s+=5;
+  if(rule){
+    // Exact dept key match
+    if(d.k===rule.dk) s+=50;
+    // Dept name contains the rule's department name
+    else if(d.n.includes(rule.dept) || rule.dept.includes(d.n)) s+=35;
+    // Partial: same first 2 chars of key
+    else if(d.k.slice(0,2)===rule.dk?.slice(0,2)) s+=20;
+    // Broader category match
+    else if(d.k.includes(rule.dk?.slice(0,1)) || rule.dk?.includes(d.k?.slice(0,1))) s+=8;
+  }
+
+  // 2) Keyword matching (30% weight)
+  const kw=[d.n,d.k,d.d].join(' ').toLowerCase();
+  const inputWords = input.split(/[\s,，、/]+/).filter(w=>w.length>=2);
+  let kwHits=0;
+  for(const w of inputWords){
+    if(kw.includes(w)) kwHits+=w.length;
+  }
+  s+=(kwHits/Math.max(input.length,1))*30;
+
+  // 3) Hospital level bonus (12% max)
+  if(h.lk==='3a') s+=12;else if(h.lk==='3') s+=9;else if(h.lk==='2') s+=5;else s+=2;
+
+  // 4) Doctor count bonus (8% max)
+  s+=Math.min(d.dr.length*2, 8);
+
   return Math.min(Math.round(s),99);
 }
 function rankRecommendations(input) {
