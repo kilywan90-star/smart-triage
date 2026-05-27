@@ -1177,43 +1177,83 @@ function rankRecommendations(input) {
   return results.filter(e=>{const k=`${e.hospital.id}|${e.department.k}`;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
 }
 
-// ==================== Follow-up Questions (Structured) ====================
+// ==================== Follow-up Questions (Context-Aware Structured) ====================
 function generateFollowUp(input, round) {
   const text = (collectedSymptoms.join(' ') + ' ' + input).toLowerCase();
 
-  // Symptom-specific pain quality questions
-  const painQs = [
-    {q:'疼痛是哪种类型？', choices:['跳着痛/搏动性','胀痛/压迫感','针刺样/电击样','钝痛/隐隐作痛','说不清楚']},
-    {q:'疼痛有没有向其他部位放射？', choices:['没有放射','向头部/面部','向手臂/肩膀','向背部/腰部','向腿部']},
-    {q:'疼痛是持续性的还是阵发性的？', choices:['持续性','阵发性/一阵一阵','时好时坏','早上重晚上轻','晚上重早上轻']},
-  ];
+  // ── Symptom-specific question sequences ──
+  const sequences = {
+    // 腹痛/腹泻/消化
+    abdomen: [
+      {q:'请问疼痛在哪个部位？', choices:['上腹(胃部)','右上腹','左上腹','肚脐周围','下腹(小腹)','右下腹']},
+      {q:'疼痛是哪种类型？', choices:['绞痛/痉挛','胀痛','隐痛/钝痛','针刺样','灼烧感']},
+      {q:'大便是什么性状？', choices:['水样便','稀便','黏液便','带血','正常','没注意']},
+      {q:'一天腹泻几次？', choices:['1-3次','4-6次','7次以上','没有腹泻']},
+      {q:'有没有恶心呕吐？', choices:['有恶心呕吐','只有恶心','没有','有发热']},
+      {q:'发病前吃了什么？', choices:['油腻/辛辣','生冷食物','海鲜','隔夜饭菜','正常饮食']},
+    ],
+    // 头痛
+    head: [
+      {q:'头痛在哪个位置？', choices:['太阳穴两侧','前额','后脑勺','整个头部','单侧']},
+      {q:'是哪种痛感？', choices:['跳着痛','胀痛/紧箍感','针刺/电击','钝痛','说不清楚']},
+      {q:'有没有以下伴随症状？', choices:['恶心/呕吐','怕光/怕声音','头晕','视力模糊','没有']},
+      {q:'头痛发作频率？', choices:['偶尔','每周几次','每天都有','持续不断','第一次']},
+      {q:'什么情况会诱发？', choices:['劳累/压力','月经前后','饮酒后','天气变化','没有规律']},
+    ],
+    // 胸痛/心脏
+    chest: [
+      {q:'胸痛具体在哪个位置？', choices:['胸骨后','左胸前','右胸','整个胸部','不确定']},
+      {q:'疼痛有放射吗？', choices:['没有','向左肩/左臂','向背部','向下颌','向腹部']},
+      {q:'疼痛持续多久了？', choices:['几秒-几分钟','10-30分钟','半小时以上','反复发作']},
+      {q:'什么情况诱发？', choices:['活动/劳累','情绪激动','休息时','饭后','没有规律']},
+      {q:'有没有伴随症状？', choices:['出汗','呼吸困难','心慌','恶心','没有']},
+    ],
+    // 发热/感冒/呼吸道
+    fever: [
+      {q:'体温大概多少？', choices:['37.3-38℃(低烧)','38-39℃(中烧)','39℃以上(高烧)','没量体温']},
+      {q:'发热持续多久了？', choices:['1天以内','1-3天','3-5天','5天以上','反复发热']},
+      {q:'有没有以下症状？', choices:['咳嗽','喉咙痛','鼻塞流涕','全身酸痛','没有']},
+      {q:'咳嗽有痰吗？', choices:['干咳无痰','白痰','黄痰/绿痰','痰中带血','没咳嗽']},
+    ],
+    // 腰疼/骨科
+    back: [
+      {q:'具体哪个部位疼？', choices:['颈部','上背部','腰部','臀部','整条脊柱']},
+      {q:'有没有腿麻或放射痛？', choices:['没有','大腿前侧','大腿后侧','小腿','脚底']},
+      {q:'是急性的还是慢性的？', choices:['突然扭伤/拉伤','几天内逐渐加重','慢性长期疼痛','反复发作']},
+      {q:'什么动作会加重？', choices:['弯腰','久坐','久站','走路','咳嗽/打喷嚏']},
+    ],
+    // 皮肤
+    skin: [
+      {q:'皮疹出现在哪个部位？', choices:['面部','躯干','四肢','全身','局部']},
+      {q:'皮疹是什么样子的？', choices:['红色斑点','凸起疙瘩','水疱','脱屑/干燥','风团/荨麻疹']},
+      {q:'痒不痒？', choices:['非常痒','轻微痒','不痒','灼热感']},
+      {q:'出现多久了？', choices:['几小时内','1-3天','一周以上','反复发作']},
+    ],
+  };
 
-  // General structured questions
-  const generalQs = [
+  // Detect symptom category
+  let category = null;
+  if (/腹|肚|胃|肠|腹泻|拉肚子|消化|便|呕/.test(text)) category = 'abdomen';
+  else if (/头|偏头痛|晕/.test(text)) category = 'head';
+  else if (/胸|心|闷|悸|气短|呼吸/.test(text)) category = 'chest';
+  else if (/发热|发烧|咳|感冒|流感|体温|咽|喉/.test(text)) category = 'fever';
+  else if (/腰|背|颈|关节|骨|扭|腿|膝|肩/.test(text)) category = 'back';
+  else if (/皮|疹|痒|痘|斑|过敏|湿疹/.test(text)) category = 'skin';
+
+  if (category && sequences[category]) {
+    const seq = sequences[category];
+    return seq[Math.min(round, seq.length - 1)];
+  }
+
+  // Generic fallback
+  const generic = [
     {q:'症状持续多久了？', choices:['几小时内','1-3天','3-7天','1-4周','一个月以上']},
     {q:'不适程度打分？', choices:['轻微(1-3分)','中度(4-6分)','严重(7-9分)','无法忍受(10分)']},
-    {q:'有没有伴随以下情况？', choices:['发热/发冷','恶心/呕吐','乏力/出汗','头痛/头晕','没有伴随症状']},
-    {q:'什么情况会加重？', choices:['活动/劳累后','休息时','吃东西后','压力/情绪波动','没有明显规律']},
-    {q:'什么情况能缓解？', choices:['休息后好转','吃药后好转','改变姿势后好转','热敷/按摩后好转','没有缓解方式']},
-    {q:'以前有过类似情况吗？', choices:['第一次出现','以前偶尔有','经常反复发作','有慢性病史','家族有类似情况']},
-    {q:'您的年龄段是？', choices:['儿童(<12岁)','青少年(12-18岁)','成年人(18-60岁)','老年人(60岁以上)']},
-    {q:'不适的具体部位？', choices:['左侧','右侧','中间/正中央','整个区域','不好确定']},
-    {q:'最近是否做过相关检查？', choices:['没做过检查','做过血液检查','做过CT/核磁','做过B超/彩超','做过其他检查']},
-    {q:'目前是否在服用药物？', choices:['没有服药','服用处方药','服用非处方药','服用中药/保健品','不清楚药名']},
-    {q:'有没有过敏史或药物过敏？', choices:['没有过敏','有药物过敏','有食物过敏','有花粉/尘螨过敏','不清楚']},
+    {q:'有没有伴随症状？', choices:['发热','恶心呕吐','头痛头晕','乏力','没有']},
+    {q:'什么情况会加重？', choices:['活动后','休息时','吃饭后','情绪波动','没有规律']},
+    {q:'您的年龄段？', choices:['儿童','青少年','成年人','老年人']},
   ];
-
-  // Pick: first round = pain quality if pain-related, else general
-  const isPain = /痛|疼|胀|酸|麻|不适/.test(text);
-  let selected;
-  if (isPain && round <= 2) {
-    selected = painQs[Math.min(round, painQs.length - 1)];
-  } else {
-    // Offset by pain questions already asked
-    const offset = isPain ? Math.max(0, round - 2) : round;
-    selected = generalQs[Math.min(offset, generalQs.length - 1)];
-  }
-  return selected || generalQs[0];
+  return generic[Math.min(round, generic.length - 1)];
 }
 
 function addChoiceButtons(choices, callback) {
