@@ -1101,15 +1101,24 @@ const TRIAGE_RULES = [
 ];
 
 function stripJSON(text) {
-  // Remove markdown JSON blocks
   text = text.replace(/\`\`\`json[\s\S]*?\`\`\`/g, '').trim();
-  // Remove raw JSON objects that contain triage/medical keys
   text = text.replace(/\{[^{}]*"(?:department|triage_level|urgency|科室|分诊|reason)"[^}]*\}/gi, '').trim();
-  // Remove remaining dangling curly braces from failed JSON
   text = text.replace(/^\s*\{[^}]*\}\s*$/gm, '').trim();
-  // Collapse multiple blank lines
   text = text.replace(/\n{3,}/g, '\n\n');
-  return text || '抱歉，AI未能生成有效的回复，请根据下方推荐列表选择科室。';
+  return beautifyText(text || '抱歉，AI未能生成有效的回复');
+}
+
+function beautifyText(text) {
+  if (!text || text.length < 10) return text;
+  const boldKeys = ['推荐科室','就医建议','注意事项','初步考虑','诊断考虑','可能疾病','检查建议','用药建议','就诊科室','挂号科室','处理建议','温馨提示','重要提示','饮食建议','生活建议','随访建议','科室推荐','治疗建议','进一步检查','需警惕','紧急提醒','就诊指引','复诊建议','预防建议','健康指导'];
+  let result = text;
+  boldKeys.forEach(k => {
+    const re = new RegExp(`(${k}[：:])`, 'g');
+    result = result.replace(re, '<span style="font-weight:800;color:#1a7ad9;">$1</span>');
+  });
+  result = result.replace(/(\d+\.?\d*(?:℃|[度分]|[天周月年]|[小分秒]时|ml|mg|kg|次|级|%))/g, '<span style="font-weight:700;">$1</span>');
+  result = result.replace(/\n/g, '<br>');
+  return result;
 }
 
 // Parse choices from AI responses - handles [x], x、x、x, 1.x 2.x formats
@@ -1579,7 +1588,7 @@ async function sendMsg(text) {
         const cleaned = stripJSON(reply);
         const parsed = parseChoices(cleaned);
         // If AI didn't give brackets, show text + keep manual input available
-        addMsg('doctor', parsed.text, false, parsed.choices, (choice) => {
+        addMsg('doctor', parsed.text, true, parsed.choices, (choice) => {
           document.getElementById('userInput').value = choice;
           sendMsg();
         });
@@ -1598,7 +1607,7 @@ async function sendMsg(text) {
         const reply=await callAI(conversation);
         const cleaned = stripJSON(reply);
         const parsed = parseChoices(cleaned);
-        addMsg('doctor', parsed.text, false, parsed.choices.length > 0 ? parsed.choices : null, parsed.choices.length > 0 ? (choice) => {
+        addMsg('doctor', parsed.text, true, parsed.choices.length > 0 ? parsed.choices : null, parsed.choices.length > 0 ? (choice) => {
           document.getElementById('userInput').value = choice;
           sendMsg();
         } : null);
