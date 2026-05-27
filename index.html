@@ -1099,6 +1099,8 @@ const TRIAGE_RULES = [
   { kw:['伤口','外伤','擦伤','割伤','划伤','切伤','刺伤','需要缝针','伤口感染','伤口化脓','破伤风','动物咬伤','狗咬','猫抓','蛇咬'],dept:'急诊外科',dk:'急诊科',urg:'yellow',tips:'动物咬伤需注射狂犬疫苗+破伤风。深伤口需清创缝合。'},
   { kw:['烫伤','烧伤','热水烫伤','火焰烧伤','化学烧伤','电烧伤','烫伤水泡','烫伤起泡'],dept:'急诊外科',dk:'急诊科',urg:'yellow',tips:'冷水冲洗至少15分钟。不要涂抹牙膏/酱油。面积大请直接去急诊。'},
   { kw:['疼痛','全身痛','肌肉痛','神经痛','慢性疼痛','癌痛','顽固性疼痛','疼痛管理'],dept:'疼痛科',dk:'内科',urg:'green-a',tips:'慢性疼痛可去疼痛科综合治疗。不要长期自行服用止痛药。'},
+  { kw:['乏力','疲劳','没精神','浑身无力','疲倦','累','没劲','虚弱','没力气'],dept:'内科',dk:'内科',urg:'green-a',tips:'持续乏力伴体重下降/发热建议全面检查。'},
+  { kw:['体重下降','体重减轻','消瘦','瘦了','不明原因消瘦','体重骤降','体重一直掉'],dept:'内分泌科',dk:'内分泌科',urg:'yellow',tips:'不明原因体重下降需排查糖尿病/甲亢/肿瘤。建议查血糖甲功。'},
 ];
 
 function stripJSON(text) {
@@ -1347,7 +1349,8 @@ function generateFollowUp(input, round) {
 
   // Detect symptom category (order matters for overlaps)
   let category = null;
-  if (/牙|口腔|牙龈|蛀牙|龋齿|智齿/.test(text)) category = 'tooth';
+  if (/儿童|小孩|宝宝|婴儿|幼儿|小儿|孩子/.test(text)) category = 'child';
+  else if (/牙|口腔|牙龈|蛀牙|龋齿|智齿/.test(text)) category = 'tooth';
   else if (/眼|视力|看东西|模糊|近视|白内|青光|结膜/.test(text)) category = 'eye';
   else if (/耳|听力|耳鸣|鼻|鼻炎|鼻塞|喉咙|咽喉|嗓子|声带|声音/.test(text)) category = 'ent';
   else if (/小便|尿|膀胱|肾|前列|结石/.test(text)) category = 'urine';
