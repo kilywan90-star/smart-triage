@@ -725,7 +725,8 @@ let avatarMode = localStorage.getItem('avatar_mode') || 'basic';
 let conversation = [], isProcessing = false, questionCount = 0, collectedSymptoms = [];
 const MIN_QUESTIONS = 3;
 let consultCount = parseInt(localStorage.getItem('consult_count')||'0');
-let currentAudio = null; // Track playing TTS audio
+let currentAudio = null;
+let lastAIConclusion = ''; // Store AI's final conclusion for the slip // Track playing TTS audio
 
 function stopAllSpeech() {
   if (synth) synth.cancel();
@@ -1479,7 +1480,7 @@ function renderRecPanel(input) {
   scrollChat();
 }
 
-function showSlip(hospId, deptName, input) {
+function showSlip(hospId, deptName, input, aiText) {
   const h=CD_HOSPITALS.find(x=>x.id===hospId);
   const d=h?.depts.find(x=>x.n===deptName);
   if(!h||!d)return;
@@ -1538,6 +1539,14 @@ function showSlip(hospId, deptName, input) {
         <div style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#e8f4fd;color:#1a7ad9;margin-top:3px;">${h.level}</div>
         <div style="font-size:11px;color:#999;margin-top:4px;">📍 ${h.addr}  ·  📞 ${h.tel}</div>
       </div>
+
+      ${aiText ? `
+      <!-- AI Analysis - Purple card -->
+      <div style="background:#faf5ff;border-radius:12px;padding:14px 16px;margin:8px 0;border:1px solid #e8d5f5;">
+        <div style="font-size:12px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">AI 分析结论</div>
+        <div style="font-size:13px;color:#333;line-height:1.7;">${aiText.replace(/\n/g,'<br>')}</div>
+      </div>
+      ` : ''}
 
       <!-- 初步考虑 - Blue card -->
       <div style="background:#f3f7ff;border-radius:12px;padding:14px 16px;margin:8px 0;border:1px solid #dce8fa;">
@@ -1663,13 +1672,14 @@ async function sendMsg(text) {
         const reply=await callAI(conversation);
         const cleaned = stripJSON(reply);
         const parsed = parseChoices(cleaned);
+        lastAIConclusion = parsed.text;
         addMsg('doctor', parsed.text, true, parsed.choices.length > 0 ? parsed.choices : null, parsed.choices.length > 0 ? (choice) => {
           document.getElementById('userInput').value = choice;
           sendMsg();
         } : null);
         renderRecPanel(msg);
         const results=rankRecommendations(msg);
-        if(results.length>0)setTimeout(()=>showSlip(results[0].hospital.id,results[0].department.n,msg),400);
+        if(results.length>0)setTimeout(()=>showSlip(results[0].hospital.id,results[0].department.n,msg,lastAIConclusion),400);
       }catch(e){addDoctorMsgFromRule(rule,msg);renderRecPanel(msg);}
       consultCount++;localStorage.setItem('consult_count',consultCount);
       resetConsultation();
@@ -1688,7 +1698,7 @@ async function sendMsg(text) {
       addMsg('doctor','下方已按相似度和置信度排序。点击卡片查看详情。',true);
       renderRecPanel(msg);
       const results=rankRecommendations(msg);
-      if(results.length>0)setTimeout(()=>showSlip(results[0].hospital.id,results[0].department.n,msg),500);
+      if(results.length>0)setTimeout(()=>showSlip(results[0].hospital.id,results[0].department.n,msg,''),500);
       consultCount++;localStorage.setItem('consult_count',consultCount);
       resetConsultation();
     }
