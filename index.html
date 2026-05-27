@@ -1231,9 +1231,7 @@ function toggleVoiceMode() {
   }
 }
 
-function getAsrApiKey() { return localStorage.getItem("dashscope_key") || ""; }
-  return localStorage.getItem('ds_api_key') || '';
-}
+function getAsrApiKey() { return localStorage.getItem('dashscope_key') || ''; }
 
 function getAsrModel() {
   // FunASR models via DashScope: paraformer-v2 (fast), paraformer-v1 (stable)
