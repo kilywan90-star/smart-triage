@@ -197,25 +197,25 @@ body {
   color:#fff; font-size:16px; cursor:pointer; flex-shrink:0; transition:all 0.2s;
   display:flex; align-items:center; justify-content:center;
 }
-.ai-input-bar .btn-send:active { transform:scale(0.92); }
-.ai-input-bar .btn-send:disabled { background:#c0c8d0; }
-.ai-input-bar .btn-mic {
-  width:40px; height:40px; border-radius:50%; border:none; background:#f0f4f8;
-  color:var(--text-secondary); font-size:18px; cursor:pointer; flex-shrink:0;
-  transition:all 0.2s; display:flex; align-items:center; justify-content:center;
+.ai-input-bar .btn-mic-hold {
+  width:40px; height:40px; border-radius:50%; border:none;
+  background:#f0f4f8; color:var(--text-secondary); font-size:18px; cursor:pointer;
+  flex-shrink:0; transition:all 0.15s ease; display:flex; align-items:center;
+  justify-content:center; position:relative; -webkit-tap-highlight-color:transparent;
+  user-select:none; touch-action:manipulation;
 }
-.ai-input-bar .btn-mic:active { transform:scale(0.92); }
-.ai-input-bar .btn-mic.recording {
-  background:#ea4335; color:#fff; animation:mic-pulse 1s infinite;
+.ai-input-bar .btn-mic-hold:active { transform:scale(0.9); background:#e8eef4; }
+.ai-input-bar .btn-mic-hold.recording {
+  background:#ea4335; color:#fff; transform:scale(1.1);
+  box-shadow:0 0 0 0 rgba(234,67,53,0.5); animation:mic-ripple 1.2s ease-out infinite;
 }
-@keyframes mic-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(234,67,53,0.4)} 50%{box-shadow:0 0 0 12px rgba(234,67,53,0)} }
-.ai-input-bar .btn-voice-toggle {
-  width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
-  background:#fff; color:var(--text-secondary); font-size:13px; cursor:pointer;
-  flex-shrink:0; display:flex; align-items:center; justify-content:center;
-  transition:all 0.2s;
+@keyframes mic-ripple {
+  0% { box-shadow:0 0 0 0 rgba(234,67,53,0.5); }
+  100% { box-shadow:0 0 0 16px rgba(234,67,53,0); }
 }
-.ai-input-bar .btn-voice-toggle.voice-active { background:var(--primary-light); color:var(--primary); border-color:var(--primary); }
+
+/* Old buttons - keep for compatibility, hide */
+.btn-voice-toggle, .btn-mic { display:none !important; }
 
 /* Recording Overlay */
 .recording-overlay {
@@ -580,9 +580,8 @@ body {
     <span class="chip" onclick="sendChip(this)">头晕</span>
   </div>
   <div class="ai-input-bar">
-    <button class="btn-voice-toggle" id="btnVoiceToggle" onclick="toggleVoiceMode()" title="切换语音/文字">🎤</button>
+    <button class="btn-mic-hold" id="btnMicHold" title="按住说话">🎤</button>
     <input type="text" id="userInput" placeholder="描述您的症状..." autocomplete="off" onkeydown="if(event.key==='Enter')sendMsg()">
-    <button class="btn-mic" id="btnMic" onclick="startRecording()" style="display:none" title="按住说话">🎙️</button>
     <button class="btn-send" id="btnSend" onclick="sendMsg()">&#10148;</button>
   </div>
 
@@ -1432,180 +1431,120 @@ async function callAI(messages){
 function sendChip(el){sendMsg(el.textContent);}
 
 // ==================== Voice (FunASR + Browser Fallback) ====================
-let voiceMode = false;
-let mediaRecorder = null;
-let audioChunks = [];
+let mediaRecorder = null, audioChunks = [];
 let synth = window.speechSynthesis;
-let isRecording = false;
+let isRecording = false, holdTimer = null;
 
-function toggleVoiceMode() {
-  voiceMode = !voiceMode;
-  const btn = document.getElementById('btnVoiceToggle');
-  const micBtn = document.getElementById('btnMic');
-  const input = document.getElementById('userInput');
-  const sendBtn = document.getElementById('btnSend');
-
-  if (voiceMode) {
-    btn.classList.add('voice-active');
-    btn.textContent = '⌨️';
-    micBtn.style.display = 'flex';
-    input.style.display = 'none';
-    sendBtn.style.display = 'none';
-    input.placeholder = '点击麦克风开始说话...';
-  } else {
-    btn.classList.remove('voice-active');
-    btn.textContent = '🎤';
-    micBtn.style.display = 'none';
-    input.style.display = '';
-    sendBtn.style.display = '';
-    input.placeholder = '描述您的症状...';
-  }
-}
-
-function getAsrApiKey() { return localStorage.getItem('dashscope_key') || ''; }
-
-function getAsrModel() {
-  // FunASR models via DashScope: paraformer-v2 (fast), paraformer-v1 (stable)
-  return 'paraformer-v2';
+function initHoldToTalk() {
+  const btn = document.getElementById('btnMicHold');
+  if (!btn) return;
+  btn.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    holdTimer = setTimeout(() => startRecording(), 150);
+  });
+  btn.addEventListener('pointerup', function(e) {
+    e.preventDefault();
+    clearTimeout(holdTimer);
+    if (isRecording) stopRecording(true);
+  });
+  btn.addEventListener('pointerleave', function(e) {
+    clearTimeout(holdTimer);
+    if (isRecording) stopRecording(true);
+  });
+  btn.addEventListener('pointercancel', function(e) {
+    clearTimeout(holdTimer);
+    if (isRecording) stopRecording(false);
+  });
+  let touchStartY = 0;
+  btn.addEventListener('touchstart', function(e) { touchStartY = e.touches[0].clientY; }, {passive: true});
+  btn.addEventListener('touchmove', function(e) {
+    const dy = touchStartY - e.touches[0].clientY;
+    if (dy > 50 && isRecording) {
+      document.getElementById('recHint').textContent = '松开取消发送';
+      document.getElementById('recordingOverlay').style.background = 'rgba(180,0,0,0.75)';
+    } else if (isRecording) {
+      document.getElementById('recHint').textContent = '正在聆听...';
+      document.getElementById('recordingOverlay').style.background = 'rgba(0,0,0,0.7)';
+    }
+  }, {passive: true});
+  btn.addEventListener('touchend', function(e) {
+    const dy = touchStartY - (e.changedTouches[0]?.clientY || touchStartY);
+    if (dy > 60 && isRecording) { stopRecording(false); document.getElementById('userInput').value = ''; }
+  });
 }
 
 async function funasrRecognize(audioBlob) {
-  const apiKey = getAsrApiKey();
+  const apiKey = localStorage.getItem('dashscope_key')||'';
   if (!apiKey) throw new Error('No API key');
-
-  // Use DashScope speech recognition API
   const formData = new FormData();
-  formData.append('model', getAsrModel());
+  formData.append('model', 'paraformer-v2');
   formData.append('file', audioBlob, 'recording.wav');
   formData.append('language_hints', 'zh');
-
   const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}` },
-    body: formData
+    method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}` }, body: formData
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`ASR API ${res.status}: ${err}`);
-  }
-
+  if (!res.ok) throw new Error(`ASR ${res.status}`);
   const data = await res.json();
   return data.text || '';
 }
 
 function startRecording() {
   if (isRecording) return;
-
-  const hasFunASR = !!getAsrApiKey();
-  const useBrowserFallback = !hasFunASR;
-
-  if (useBrowserFallback) {
-    // Browser Web Speech API fallback
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert('请配置 DeepSeek API Key（百炼API）以使用语音识别功能，或使用 Chrome 浏览器。');
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'zh-CN';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.maxAlternatives = 1;
-
-    let finalText = '';
-    recognition.onresult = function(event) {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) { finalText += event.results[i][0].transcript; }
-        else { interim += event.results[i][0].transcript; }
-      }
-      document.getElementById('recHint').textContent = finalText + interim || '正在聆听...';
-    };
-    recognition.onerror = function(event) {
-      if (event.error === 'not-allowed') alert('请在浏览器设置中允许麦克风权限');
-      stopRecording(false);
-    };
-    recognition.onend = function() {
-      if (isRecording) recognition.start();
-    };
-
-    recognition.start();
-    isRecording = true;
+  const btn = document.getElementById('btnMicHold');
+  const useBrowser = !(localStorage.getItem('dashscope_key')||'');
+  if (useBrowser) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert('请配置DashScope API Key使用语音，或用Chrome浏览器。'); return; }
+    const r = new SR(); r.lang = 'zh-CN'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1;
+    let ft = '';
+    r.onresult = function(e) { let im = ''; for (let i = e.resultIndex; i < e.results.length; i++) { if (e.results[i].isFinal) ft += e.results[i][0].transcript; else im += e.results[i][0].transcript; } document.getElementById('recHint').textContent = ft + im || '正在聆听...'; };
+    r.onerror = function(e) { if (e.error === 'not-allowed') alert('请允许麦克风权限'); stopRecording(false); };
+    r.onend = function() { if (isRecording) r.start(); };
+    r.start(); isRecording = true;
+    btn.classList.add('recording');
     document.getElementById('recordingOverlay').classList.add('show');
-    document.getElementById('btnMic').classList.add('recording');
-    document.getElementById('recHint').textContent = '正在聆听...（浏览器ASR）';
-    // Store ref for stop
-    window._browserRecognition = recognition;
+    document.getElementById('recHint').textContent = '正在聆听...';
+    window._br = r;
   } else {
-    // FunASR via DashScope: record audio with MediaRecorder
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-      audioChunks = [];
-
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-
+    navigator.mediaDevices.getUserMedia({audio:true}).then(s => {
+      mediaRecorder = new MediaRecorder(s, {mimeType:'audio/webm;codecs=opus'}); audioChunks = [];
+      mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
       mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        const hint = document.getElementById('recHint');
-        hint.textContent = 'FunASR 识别中...';
-
+        s.getTracks().forEach(t=>t.stop());
+        const blob = new Blob(audioChunks, {type:'audio/webm'});
+        const h = document.getElementById('recHint'); h.textContent = '识别中...';
         try {
-          const text = await funasrRecognize(audioBlob);
-          if (text) {
-            document.getElementById('userInput').value = text;
-            if (voiceMode) setTimeout(() => sendMsg(), 200);
-          } else {
-            hint.textContent = '未识别到语音，请重试';
-          }
-        } catch (err) {
-          console.error('FunASR error:', err);
-          hint.textContent = '识别失败，请重试';
-        } finally {
+          const t = await funasrRecognize(blob);
+          if (t) { document.getElementById('userInput').value = t; setTimeout(()=>sendMsg(),200); }
+          else h.textContent = '未识别到语音';
+        } catch(e) { h.textContent = '识别失败'; }
+        finally {
           document.getElementById('recordingOverlay').classList.remove('show');
-          document.getElementById('btnMic').classList.remove('recording');
-          hint.textContent = '请说出您的症状';
+          btn.classList.remove('recording'); h.textContent = '请说出您的症状'; isRecording = false;
         }
       };
-
-      mediaRecorder.start();
-      isRecording = true;
+      mediaRecorder.start(); isRecording = true;
+      btn.classList.add('recording');
       document.getElementById('recordingOverlay').classList.add('show');
-      document.getElementById('btnMic').classList.add('recording');
-      document.getElementById('recHint').textContent = '正在聆听...（FunASR）';
-    }).catch(err => {
-      console.error('Mic access error:', err);
-      alert('无法访问麦克风，请在浏览器设置中允许麦克风权限。');
-    });
+      document.getElementById('recHint').textContent = '正在聆听...';
+    }).catch(e => { alert('无法访问麦克风'); });
   }
 }
 
-function stopRecording(shouldSend = true) {
+function stopRecording(shouldSend) {
   if (!isRecording) return;
   isRecording = false;
-
-  // FunASR mode: stop MediaRecorder
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-    return; // the onstop handler will handle everything
-  }
-
-  // Browser fallback mode
-  if (window._browserRecognition) {
-    window._browserRecognition.onend = null;
-    window._browserRecognition.stop();
-    window._browserRecognition = null;
-  }
-
+  const btn = document.getElementById('btnMicHold');
+  btn.classList.remove('recording');
+  if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.stop(); return; }
+  if (window._br) { window._br.onend = null; window._br.stop(); window._br = null; }
   document.getElementById('recordingOverlay').classList.remove('show');
-  document.getElementById('btnMic').classList.remove('recording');
-
-  const text = document.getElementById('recHint').textContent.trim();
-  if (text && text !== '正在聆听...' && text !== '正在聆听...（浏览器ASR）' && shouldSend) {
-    document.getElementById('userInput').value = text;
-    if (voiceMode) setTimeout(() => sendMsg(), 300);
+  document.getElementById('recordingOverlay').style.background = 'rgba(0,0,0,0.7)';
+  if (shouldSend) {
+    const t = document.getElementById('recHint').textContent.trim();
+    if (t && t !== '正在聆听...' && t !== '松开取消发送') {
+      document.getElementById('userInput').value = t; setTimeout(()=>sendMsg(),200);
+    }
   }
   document.getElementById('recHint').textContent = '请说出您的症状';
 }
@@ -1800,6 +1739,7 @@ function updateLiveTime() {
 }
 updateLiveTime();
 setInterval(updateLiveTime, 60000);
+initHoldToTalk();
 document.getElementById('apiKeyInput').value=getApiConfig().key;
 document.getElementById('apiUrlInput').value=getApiConfig().url;
 applyModeVisuals();
