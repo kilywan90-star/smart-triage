@@ -1110,14 +1110,45 @@ function stripJSON(text) {
 
 function beautifyText(text) {
   if (!text || text.length < 10) return text;
-  const boldKeys = ['推荐科室','就医建议','注意事项','初步考虑','诊断考虑','可能疾病','检查建议','用药建议','就诊科室','挂号科室','处理建议','温馨提示','重要提示','饮食建议','生活建议','随访建议','科室推荐','治疗建议','进一步检查','需警惕','紧急提醒','就诊指引','复诊建议','预防建议','健康指导'];
+
+  // Medical keywords to highlight
+  const highlightWords = ['皮肤科','心内科','神经内科','消化内科','呼吸内科','骨科','儿科','妇科','眼科','耳鼻喉科','口腔科','泌尿外科','急诊科','中医科','康复科','内分泌科','肿瘤科','血液科','感染科','风湿免疫科','疼痛科','肛肠科','血管外科'];
+  const diseaseWords = ['银屑病','湿疹','荨麻疹','皮炎','痤疮','带状疱疹','高血压','糖尿病','冠心病','心梗','中风','肺炎','哮喘','阑尾炎','结石','痛风','类风湿','甲亢','甲减','贫血','白血病','肝硬化','肾炎'];
+
   let result = text;
-  boldKeys.forEach(k => {
-    const re = new RegExp(`(${k}[：:])`, 'g');
-    result = result.replace(re, '<span style="font-weight:800;color:#1a7ad9;">$1</span>');
+
+  // 1) Add paragraph breaks before key sections
+  const sectionBreaks = ['推荐科室','就医建议','注意事项','用药建议','检查建议','治疗建议','诊断考虑','可能疾病','温馨提示','饮食建议','生活建议','初步考虑','就诊指引'];
+  sectionBreaks.forEach(s => {
+    result = result.replace(new RegExp(`([。！？])(${s})`, 'g'), '$1<br><br>$2');
   });
-  result = result.replace(/(\d+\.?\d*(?:℃|[度分]|[天周月年]|[小分秒]时|ml|mg|kg|次|级|%))/g, '<span style="font-weight:700;">$1</span>');
+
+  // 2) Bold section headers with color
+  const allKeys = [...sectionBreaks, '复诊建议','预防建议','健康指导','处理建议','科室推荐','进一步检查','需警惕','紧急提醒','随访建议'];
+  allKeys.forEach(k => {
+    const re = new RegExp(`(${k}[：:])`, 'g');
+    result = result.replace(re, '<span style="font-weight:800;color:#1a7ad9;font-size:14px;">$1</span>');
+  });
+
+  // 3) Bold department names
+  highlightWords.forEach(w => {
+    result = result.replace(new RegExp(`(${w})`, 'g'), '<span style="font-weight:700;color:#1557b0;">$1</span>');
+  });
+
+  // 4) Bold disease names
+  diseaseWords.forEach(w => {
+    result = result.replace(new RegExp(`(${w})`, 'g'), '<span style="font-weight:600;color:#c5221f;">$1</span>');
+  });
+
+  // 5) Bold numbers and measurements
+  result = result.replace(/(\d+\.?\d*(?:℃|[度分]|[天周月年]|[小分秒]时|ml|mg|kg|次|级|%|分))/g, '<span style="font-weight:700;color:#333;">$1</span>');
+
+  // 6) Bold action verbs
+  result = result.replace(/(避免|建议|注意|警惕|立即|尽快|必须|不要|可以|应该|需要|请勿)/g, '<span style="font-weight:700;">$1</span>');
+
+  // 7) Line breaks
   result = result.replace(/\n/g, '<br>');
+
   return result;
 }
 
@@ -1488,8 +1519,10 @@ function showSlip(hospId, deptName, input) {
       <!-- 初步考虑 - Blue card -->
       <div style="background:#f3f7ff;border-radius:12px;padding:14px 16px;margin:8px 0;border:1px solid #dce8fa;">
         <div style="font-size:12px;font-weight:800;color:#1a7ad9;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">初步考虑</div>
-        <div style="font-size:13px;color:#333;line-height:1.7;">根据您描述的${deptKW}等症状，初步考虑与<span style="font-weight:800;color:#1a7ad9;">${d.n}</span>相关疾病可能。</div>
-        <div style="font-size:11px;color:#888;margin-top:4px;">${d.d}</div>
+        <div style="font-size:13px;color:#333;line-height:1.8;">
+          <div style="margin-bottom:6px;">根据您描述的<span style="font-weight:700;color:#1557b0;">${deptKW}</span>等症状，初步考虑与<span style="font-weight:800;color:#1a7ad9;font-size:14px;">${d.n}</span>相关疾病可能。</div>
+          <div style="color:#666;font-size:11px;border-top:1px dashed #dce8fa;padding-top:6px;">${beautifyText(d.d || '')}</div>
+        </div>
       </div>
 
       <!-- 推荐医生 - Green card -->
