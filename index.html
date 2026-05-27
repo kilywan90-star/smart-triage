@@ -1228,7 +1228,9 @@ function calcSimilarity(input, entry) {
   return Math.min(Math.round(s),99);
 }
 function rankRecommendations(input) {
-  const entries=getAllDeptEntries().map(e=>({...e,score:calcSimilarity(input,e)}));
+  // Use accumulated symptoms for better matching
+  const fullInput = collectedSymptoms.join(' ') + ' ' + input;
+  const entries=getAllDeptEntries().map(e=>({...e,score:calcSimilarity(fullInput,e)}));
   entries.sort((a,b)=>b.score-a.score);
   const threshold=Math.max(entries[0]?.score*0.3||20,15);
   let results=entries.filter(e=>e.score>=threshold).slice(0,8);
@@ -1452,7 +1454,8 @@ addMsg = function(role, text, isHtml, choices, choiceCb) {
 
 // ==================== Recommendation Panel ====================
 function renderRecPanel(input) {
-  const results=rankRecommendations(input);
+  const fullInput = collectedSymptoms.join(' ') + ' ' + input;
+  const results=rankRecommendations(fullInput);
   const ll={'3a':'三甲','3':'三级','2':'二甲','1':'社区'},lc={'3a':'lv-3a','3':'lv-3','2':'lv-2','1':'lv-1'};
   const rule=triageByRules(input);
   const isEmerg=rule&&rule.urg==='red';
