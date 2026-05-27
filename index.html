@@ -197,25 +197,43 @@ body {
   color:#fff; font-size:16px; cursor:pointer; flex-shrink:0; transition:all 0.2s;
   display:flex; align-items:center; justify-content:center;
 }
+.ai-input-bar .btn-mode-switch {
+  width:36px; height:36px; border-radius:50%; border:none;
+  background:transparent; color:var(--text-secondary); font-size:18px; cursor:pointer;
+  flex-shrink:0; transition:all 0.15s; display:flex; align-items:center; justify-content:center;
+}
+.ai-input-bar .btn-mode-switch:active { background:#e8eaef; }
+.ai-input-bar .btn-mode-switch.voice-active { color:var(--primary); }
+
 .ai-input-bar .btn-mic-hold {
-  width:40px; height:40px; border-radius:50%; border:none;
-  background:#f0f4f8; color:var(--text-secondary); font-size:18px; cursor:pointer;
-  flex-shrink:0; transition:all 0.15s ease; display:flex; align-items:center;
-  justify-content:center; position:relative; -webkit-tap-highlight-color:transparent;
-  user-select:none; touch-action:manipulation;
+  flex:1; height:40px; border-radius:6px; border:none;
+  background:#f5f6f8; color:var(--text-secondary); font-size:14px; font-weight:500;
+  cursor:pointer; transition:all 0.15s ease; -webkit-tap-highlight-color:transparent;
+  user-select:none; touch-action:manipulation; display:none; align-items:center; justify-content:center;
+  letter-spacing:1px;
 }
-.ai-input-bar .btn-mic-hold:active { transform:scale(0.9); background:#e8eef4; }
+.ai-input-bar .btn-mic-hold.show { display:flex; }
+.ai-input-bar .btn-mic-hold:active { background:#d2d5da; }
 .ai-input-bar .btn-mic-hold.recording {
-  background:#ea4335; color:#fff; transform:scale(1.1);
-  box-shadow:0 0 0 0 rgba(234,67,53,0.5); animation:mic-ripple 1.2s ease-out infinite;
+  background:#c8e6c9; color:#2e7d32; font-weight:600;
+  animation:hold-ripple 1.2s ease-out infinite;
 }
-@keyframes mic-ripple {
-  0% { box-shadow:0 0 0 0 rgba(234,67,53,0.5); }
-  100% { box-shadow:0 0 0 16px rgba(234,67,53,0); }
+@keyframes hold-ripple {
+  0% { box-shadow:inset 0 0 0 0 rgba(46,125,50,0.15); }
+  100% { box-shadow:inset 0 0 0 20px rgba(46,125,50,0); }
 }
 
-/* Old buttons - keep for compatibility, hide */
+/* hide old buttons */
 .btn-voice-toggle, .btn-mic { display:none !important; }
+
+/* Recording Overlay */
+.recording-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7);
+  z-index:300; display:none; align-items:center; justify-content:center; flex-direction:column;
+}
+.recording-overlay.show { display:flex; }
+.recording-wave { display:flex; align-items:center; gap:3px; height:60px; margin-bottom:16px; }
+.recording-wave .bar { width:4px; border-radius:2px; background:#fff; animation:wave 1.2s ease-in-out infinite; }
 
 /* Recording Overlay */
 .recording-overlay {
@@ -580,8 +598,9 @@ body {
     <span class="chip" onclick="sendChip(this)">头晕</span>
   </div>
   <div class="ai-input-bar">
-    <button class="btn-mic-hold" id="btnMicHold" title="按住说话">🎤</button>
+    <button class="btn-mode-switch" id="btnModeSwitch" onclick="toggleInputMode()">🎤</button>
     <input type="text" id="userInput" placeholder="描述您的症状..." autocomplete="off" onkeydown="if(event.key==='Enter')sendMsg()">
+    <button class="btn-mic-hold" id="btnMicHold" title="按住说话">按住说话</button>
     <button class="btn-send" id="btnSend" onclick="sendMsg()">&#10148;</button>
   </div>
 
@@ -1433,7 +1452,24 @@ function sendChip(el){sendMsg(el.textContent);}
 // ==================== Voice (FunASR + Browser Fallback) ====================
 let mediaRecorder = null, audioChunks = [];
 let synth = window.speechSynthesis;
-let isRecording = false, holdTimer = null;
+let isRecording = false, holdTimer = null, inputMode = 'text'; // 'text' or 'voice'
+
+function toggleInputMode() {
+  inputMode = inputMode === 'text' ? 'voice' : 'text';
+  const btn = document.getElementById('btnModeSwitch');
+  const input = document.getElementById('userInput');
+  const send = document.getElementById('btnSend');
+  const hold = document.getElementById('btnMicHold');
+  if (inputMode === 'voice') {
+    btn.textContent = '⌨️'; btn.classList.add('voice-active');
+    input.style.display = 'none'; send.style.display = 'none';
+    hold.classList.add('show');
+  } else {
+    btn.textContent = '🎤'; btn.classList.remove('voice-active');
+    input.style.display = ''; send.style.display = '';
+    hold.classList.remove('show');
+  }
+}
 
 function initHoldToTalk() {
   const btn = document.getElementById('btnMicHold');
