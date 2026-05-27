@@ -1379,42 +1379,64 @@ function stopRecording(shouldSend = true) {
   document.getElementById('recHint').textContent = '请说出您的症状';
 }
 
-// TTS (unchanged from before, kept as-is)
-function speakText(text) {
-  if (!synth) return;
-  synth.cancel();
+// TTS: DashScope CosyVoice (自然语音) + Browser fallback
+async function speakText(text) {
   const div = document.createElement('div');
   div.innerHTML = text;
   let cleanText = (div.textContent || div.innerText || '')
     .replace(/[🔴🟠🟡🟢🔵🏥📍📞💡📋💳🔬💉🩹🤖🩺🧠🫀🫁🦴👶🤰🦷👁️👂💧🧬🚑🌿💊🏃🔍⭐☎️📱⌨️🎤🎙️➤★☆⚡]/g, '')
     .replace(/[●○$]/g, '').replace(/Ⅰ级|Ⅱ级|Ⅲ级|Ⅳa|Ⅳb|≤|→|—/g, '').trim();
   if (!cleanText || cleanText.length < 2) return;
+  if (cleanText.length > 200) cleanText = cleanText.substring(0, 200);
+
+  const dashKey = localStorage.getItem('dashscope_key')||'';
+  if (dashKey) {
+    try {
+      const audioUrl = await dashscopeTTS(cleanText, dashKey);
+      if (audioUrl) { const audio = new Audio(audioUrl); audio.play().catch(()=>{}); return; }
+    } catch(e) { console.log('TTS fallback to browser:', e.message); }
+  }
+  browserTTS(cleanText);
+}
+
+async function dashscopeTTS(text, apiKey) {
+  const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/audio/speech', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: 'cosyvoice-v1', input: text, voice: 'longxiaoxia', response_format: 'mp3', speed: 1.0 })
+  });
+  if (!res.ok) throw new Error(`TTS ${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+function browserTTS(cleanText) {
+  if (!synth) return;
+  synth.cancel();
   let voices = synth.getVoices();
   if (voices.length === 0) voices = synth.getVoices();
-  const preferred = ['Google 普通话','Google 中文','Microsoft Xiaoxiao','Microsoft Yunyang','Tingting','Sin-Ji','Microsoft Yaoyao','Microsoft Huihui'];
+  const preferred = ['Google 普通话','Google 中文','Microsoft Xiaoxiao','Microsoft Yunyang','Tingting','Microsoft Yaoyao'];
   let best = null;
   for (const p of preferred) { best = voices.find(v => v.name.includes(p) && v.lang.startsWith('zh')); if (best) break; }
   if (!best) best = voices.find(v => v.lang.startsWith('zh'));
   const sentences = cleanText.split(/[。！？\n]+/).filter(s => s.trim());
-  if (sentences.length > 4 && cleanText.length > 300) {
+  if (sentences.length > 4) {
     const u = new SpeechSynthesisUtterance(sentences.slice(0,3).join('。')+'。');
     u.lang='zh-CN'; u.rate=1.0; u.pitch=1.0; u.volume=1.0; if(best)u.voice=best;
     synth.speak(u);
   } else {
-    speakSentencesWithPause(sentences, best, 0);
+    let idx = 0;
+    function next() {
+      if (idx >= sentences.length) return;
+      const s = sentences[idx].trim(); idx++;
+      if (!s) { next(); return; }
+      const u = new SpeechSynthesisUtterance(s);
+      u.lang='zh-CN'; u.rate=0.95; u.pitch=1.0; u.volume=1.0; if(best)u.voice=best;
+      u.onend = () => setTimeout(next, 200);
+      synth.speak(u);
+    }
+    next();
   }
-}
-function speakSingle(text, voice, rate) {
-  const u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=rate;u.pitch=1.0;u.volume=1.0;if(voice)u.voice=voice;synth.speak(u);
-}
-function speakSentencesWithPause(sentences, voice, idx) {
-  if (idx >= sentences.length) return;
-  const s = sentences[idx].trim();
-  if (!s) { speakSentencesWithPause(sentences, voice, idx+1); return; }
-  const u = new SpeechSynthesisUtterance(s);
-  u.lang='zh-CN'; u.rate=0.95; u.pitch=1.0; u.volume=1.0; if(voice)u.voice=voice;
-  u.onend = function() { setTimeout(() => speakSentencesWithPause(sentences, voice, idx+1), 200); };
-  synth.speak(u);
 }
 
 // Override addMsg to auto-speak doctor responses
