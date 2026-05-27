@@ -1112,18 +1112,34 @@ function stripJSON(text) {
   return text || '抱歉，AI未能生成有效的回复，请根据下方推荐列表选择科室。';
 }
 
-// Parse [选项1][选项2] from AI responses into clickable choices
+// Parse choices from AI responses - handles [x], x、x、x, 1.x 2.x formats
 function parseChoices(text) {
-  const bracketRe = /\[([^\]]+)\]/g;
-  const choices = [];
-  let m;
+  let choices = [];
+  // 1) Bracket format: [option1][option2]
+  const bracketRe = /\[([^\]]+)\]/g; let m;
   while ((m = bracketRe.exec(text)) !== null) {
-    const option = m[1].trim();
-    if (option.length > 1 && option.length < 30 && !option.includes('{') && !option.includes('<')) {
-      choices.push(option);
+    const opt = m[1].trim();
+    if (opt.length > 1 && opt.length < 30 && !/[<>{}]/.test(opt)) choices.push(opt);
+  }
+  // 2) Chinese comma separated: A、B、C or A，B，C
+  if (choices.length === 0) {
+    const commaMatch = text.match(/[：:][\s\n]*([^。！？\n]{5,60})/);
+    if (commaMatch) {
+      const segment = commaMatch[1];
+      const parts = segment.split(/[、，,；;]/).map(s => s.trim()).filter(s => s.length > 1 && s.length < 25);
+      if (parts.length >= 2 && parts.length <= 6) choices = parts;
     }
   }
-  let cleanText = text.replace(/\[([^\]]+)\]/g, '').replace(/\s+/g, ' ').trim();
+  // 3) Numbered: 1.xxx 2.xxx or 1)xxx 2)xxx
+  if (choices.length === 0) {
+    const numbered = text.match(/(?:\d[\.\)、]\s*[^\d\n]{2,20}){2,6}/);
+    if (numbered) {
+      const nums = numbered[0].split(/\d[\.\)、]\s*/).filter(s => s.trim().length > 0).map(s => s.trim());
+      if (nums.length >= 2) choices = nums;
+    }
+  }
+  // Clean text
+  let cleanText = text.replace(/\[([^\]]+)\]/g, '').replace(/\s{2,}/g, ' ').trim();
   if (!cleanText) cleanText = '请选择：';
   return { text: cleanText, choices: choices.slice(0, 6) };
 }
@@ -1377,10 +1393,17 @@ async function sendMsg(text) {
       conversation.push({role:'user',content:msg});
       try{
         const remaining=MIN_QUESTIONS-questionCount;
-        const sysPrompt=`你是医院分诊医生。还需至少${remaining}个问题才能给出结论。请提一个简短追问，并在末尾用 [选项1][选项2][选项3] 格式给出3-5个可选答案，方便用户点击选择。不要输出JSON。`;
+        const sysPrompt=`你是医院分诊医生。你需要再问${remaining}个问题。请严格按以下格式回复：
+第一行：简短追问（15字以内）
+第二行：[选项1][选项2][选项3][选项4]
+示例：
+请问疼痛是哪种类型？
+[跳着痛][胀痛][重物压迫感][说不清楚]
+每个选项不超过10个字，方括号必须保留。只提问，不给建议，不要输出JSON或代码块。`;
         const reply=await callAI([{role:'system',content:sysPrompt},...conversation]);
         const cleaned = stripJSON(reply);
         const parsed = parseChoices(cleaned);
+        // If AI didn't give brackets, show text + keep manual input available
         addMsg('doctor', parsed.text, false, parsed.choices, (choice) => {
           document.getElementById('userInput').value = choice;
           sendMsg();
