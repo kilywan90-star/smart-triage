@@ -387,7 +387,54 @@ body {
 .menu-item .mi-icon { font-size:20px; width:24px; text-align:center; }
 .menu-item .mi-arrow { margin-left:auto; color:var(--text-hint); }
 
-/* ===== Settings ===== */
+/* ===== Clone Panel ===== */
+.clone-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5);
+  z-index:200; display:none; align-items:flex-end; justify-content:center;
+}
+.clone-overlay.show { display:flex; }
+.clone-card {
+  background:#fff; border-radius:var(--radius-lg) var(--radius-lg) 0 0; width:100%;
+  max-width:430px; max-height:85vh; overflow-y:auto; padding:20px 20px calc(20px + var(--safe-bottom));
+  animation:slide-up 0.3s ease;
+}
+.clone-card h3 { font-size:17px; margin-bottom:6px; }
+.clone-card .clone-desc { font-size:12px; color:var(--text-hint); margin-bottom:16px; }
+.clone-avatar-area {
+  display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:18px;
+}
+.clone-avatar-preview {
+  width:80px; height:80px; border-radius:50%; background:var(--primary-light);
+  display:flex; align-items:center; justify-content:center; font-size:36px;
+  overflow:hidden; cursor:pointer; border:3px dashed #d0e3f5; transition:all 0.2s;
+}
+.clone-avatar-preview:hover { border-color:var(--primary); }
+.clone-avatar-preview.has-photo { border-style:solid; border-color:var(--primary); }
+.clone-avatar-preview img { width:100%; height:100%; object-fit:cover; }
+.clone-btn-row { display:flex; gap:8px; flex-wrap:wrap; }
+.clone-btn {
+  flex:1; min-width:100px; padding:12px; border-radius:12px; border:1px solid #d0e3f5;
+  background:#f8faff; font-size:12px; font-weight:600; cursor:pointer;
+  text-align:center; transition:all 0.2s; font-family:inherit; color:var(--text);
+}
+.clone-btn:active { background:var(--primary); color:#fff; }
+.clone-btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.clone-btn.primary:active { background:var(--primary-dark); }
+.clone-field { margin-bottom:14px; }
+.clone-field label { font-size:12px; color:var(--text-secondary); display:block; margin-bottom:4px; }
+.clone-field input {
+  width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px;
+  font-size:13px; font-family:inherit;
+}
+.clone-field input:focus { border-color:var(--primary); outline:none; }
+.clone-status {
+  font-size:11px; padding:8px 12px; border-radius:8px; margin-top:8px; text-align:center;
+  display:none;
+}
+.clone-status.show { display:block; }
+.clone-status.success { background:#e6f4ea; color:#137333; }
+.clone-status.error { background:#fde8e8; color:#c5221f; }
+.clone-status.info { background:#e8f4fd; color:#1a7ad9; }
 .settings-overlay {
   position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.45);
   z-index:200; display:none; align-items:flex-end; justify-content:center;
@@ -575,6 +622,7 @@ body {
       <div class="menu-item" onclick="handleQuickAction('register');switchTab('ask')"><span class="mi-icon">&#128203;</span>我的挂号<span class="mi-arrow">></span></div>
       <div class="menu-item" onclick="handleQuickAction('payment');switchTab('ask')"><span class="mi-icon">&#128179;</span>缴费记录<span class="mi-arrow">></span></div>
       <div class="menu-item" onclick="openSettings()"><span class="mi-icon">&#9881;</span>API 设置<span class="mi-arrow">></span></div>
+      <div class="menu-item" onclick="openClone()"><span class="mi-icon">&#129657;</span>数字分身<span class="mi-arrow">></span></div>
     </div>
   </div>
 </div>
@@ -614,6 +662,40 @@ body {
     <input type="text" id="modelInput" value="deepseek-v4-flash" onchange="saveSettings()">
     <div class="hint">deepseek-v4-flash（快速）/ deepseek-chat（标准）/ deepseek-reasoner（推理）</div>
     <button class="btn-close-settings" onclick="closeSettings()">关闭</button>
+  </div>
+</div>
+
+<!-- Clone Panel -->
+<div class="clone-overlay" id="cloneOverlay" onclick="if(event.target===this)closeClone()">
+  <div class="clone-card">
+    <h3>数字医生分身</h3>
+    <div class="clone-desc">上传医生照片和声音样本，生成专属数字分身</div>
+    <div class="clone-avatar-area">
+      <div class="clone-avatar-preview" id="cloneAvatarPreview" onclick="document.getElementById('photoInput').click()">&#129657;</div>
+      <div style="font-size:11px;color:var(--text-hint);">点击更换头像</div>
+      <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(event)">
+    </div>
+    <div class="clone-field">
+      <label>医生姓名</label>
+      <input type="text" id="cloneNameInput" placeholder="如：王主任" onchange="saveCloneConfig()">
+    </div>
+    <div class="clone-field">
+      <label>职称/科室</label>
+      <input type="text" id="cloneTitleInput" placeholder="如：心血管内科主任医师" onchange="saveCloneConfig()">
+    </div>
+    <div class="clone-field">
+      <label>声音样本（10-30秒语音介绍）</label>
+      <div class="clone-btn-row">
+        <button class="clone-btn" onclick="recordVoiceSample()" id="btnRecordVoice">录制声音</button>
+        <button class="clone-btn" onclick="document.getElementById('voiceInput').click()">上传音频</button>
+      </div>
+      <input type="file" id="voiceInput" accept="audio/*" style="display:none" onchange="handleVoiceUpload(event)">
+      <div class="clone-status" id="voiceStatus"></div>
+    </div>
+    <div class="clone-btn-row" style="margin-top:16px;">
+      <button class="clone-btn" onclick="closeClone()">取消</button>
+      <button class="clone-btn primary" onclick="applyClone()">应用分身</button>
+    </div>
   </div>
 </div>
 
@@ -1563,7 +1645,113 @@ addMsg = function(role, text, isHtml) {
 };
 if (synth) { synth.getVoices(); synth.onvoiceschanged = () => synth.getVoices(); }
 
-// ==================== Init ====================
+// ==================== Clone ====================
+function openClone() { document.getElementById('cloneOverlay').classList.add('show'); loadCloneConfig(); }
+function closeClone() { document.getElementById('cloneOverlay').classList.remove('show'); }
+function loadCloneConfig() {
+  document.getElementById('cloneNameInput').value = localStorage.getItem('clone_name')||'';
+  document.getElementById('cloneTitleInput').value = localStorage.getItem('clone_title')||'';
+  const photo = localStorage.getItem('clone_photo');
+  const preview = document.getElementById('cloneAvatarPreview');
+  if (photo) { preview.innerHTML = `<img src="${photo}" alt="doctor">`; preview.classList.add('has-photo'); }
+  else { preview.innerHTML = '&#129657;'; preview.classList.remove('has-photo'); }
+}
+
+function handlePhotoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const base64 = ev.target.result;
+    localStorage.setItem('clone_photo', base64);
+    const preview = document.getElementById('cloneAvatarPreview');
+    preview.innerHTML = `<img src="${base64}" alt="doctor">`;
+    preview.classList.add('has-photo');
+    applyClone();
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleVoiceUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const st = document.getElementById('voiceStatus');
+  st.className = 'clone-status show info'; st.textContent = '正在处理声音样本...';
+
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    localStorage.setItem('clone_voice', ev.target.result);
+    st.className = 'clone-status show success'; st.textContent = '声音样本已保存，将用于数字分身语音。';
+    setTimeout(() => { st.className = 'clone-status'; }, 3000);
+  };
+  reader.readAsDataURL(file);
+}
+
+let voiceRecorder = null, voiceChunks = [];
+async function recordVoiceSample() {
+  const st = document.getElementById('voiceStatus');
+  const btn = document.getElementById('btnRecordVoice');
+  if (voiceRecorder && voiceRecorder.state === 'recording') {
+    voiceRecorder.stop();
+    btn.textContent = '录制声音';
+    st.className = 'clone-status show info'; st.textContent = '正在保存...';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voiceRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    voiceChunks = [];
+    voiceRecorder.ondataavailable = e => { if (e.data.size > 0) voiceChunks.push(e.data); };
+    voiceRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.onload = ev => {
+        localStorage.setItem('clone_voice', ev.target.result);
+        st.className = 'clone-status show success'; st.textContent = '声音录制完成！';
+        setTimeout(() => { st.className = 'clone-status'; }, 3000);
+      };
+      reader.readAsDataURL(blob);
+    };
+    voiceRecorder.start();
+    btn.textContent = '停止录制';
+    st.className = 'clone-status show info'; st.textContent = '正在录制...请说10-30秒介绍';
+  } catch(e) {
+    st.className = 'clone-status show error'; st.textContent = '无法访问麦克风';
+  }
+}
+
+function saveCloneConfig() {
+  localStorage.setItem('clone_name', document.getElementById('cloneNameInput').value.trim());
+  localStorage.setItem('clone_title', document.getElementById('cloneTitleInput').value.trim());
+}
+
+function applyClone() {
+  saveCloneConfig();
+  const name = localStorage.getItem('clone_name')||'';
+  const photo = localStorage.getItem('clone_photo');
+  const title = localStorage.getItem('clone_title')||'';
+  if (name) document.getElementById('aiName').textContent = 'Dr.' + name;
+  if (title) document.getElementById('aiStatusText').textContent = title;
+  applyAvatarPhoto();
+  closeClone();
+  addSystemMsg(name ? `已切换为 Dr.${name} 的数字分身。` : '数字分身已更新。');
+}
+
+function applyAvatarPhoto() {
+  const photo = localStorage.getItem('clone_photo');
+  const avatar = document.getElementById('aiAvatarSmall');
+  if (photo && avatar) { avatar.innerHTML = `<img src="${photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">`; }
+}
+
+// Auto-apply clone on init
+function initClone() {
+  const photo = localStorage.getItem('clone_photo');
+  const name = localStorage.getItem('clone_name');
+  if (name) document.getElementById('aiName').textContent = 'Dr.' + name;
+  if (photo) applyAvatarPhoto();
+}
+initClone();
 function updateLiveTime() {
   const now = new Date();
   const h = now.getHours().toString().padStart(2,'0');
