@@ -422,7 +422,7 @@ body {
 
 <!-- ==================== Page 1: Home ==================== -->
 <div class="page active" id="pageHome">
-  <div class="status-bar"><span>9:41</span><span style="font-size:10px;color:#f5c842;font-weight:600;">万锋作品  18328474765</span><span>HD</span></div>
+  <div class="status-bar"><span class="live-time">9:41</span><span style="font-size:10px;color:#f5c842;font-weight:600;">万锋作品  18328474765</span><span>HD</span></div>
   <div class="app-header">
     <div class="header-top">
       <span class="hospital-name">&#127973; 成都高新 · 智慧医疗平台</span>
@@ -550,7 +550,7 @@ body {
 
 <!-- ==================== Page 3: Profile ==================== -->
 <div class="page" id="pageProfile">
-  <div class="status-bar"><span>9:41</span><span style="font-size:10px;color:#f5c842;font-weight:600;">万锋作品  18328474765</span><span>HD</span></div>
+  <div class="status-bar"><span class="live-time">9:41</span><span style="font-size:10px;color:#f5c842;font-weight:600;">万锋作品  18328474765</span><span>HD</span></div>
   <div class="app-header" style="padding-bottom:18px;">
     <div class="header-top">
       <span class="hospital-name">&#127973; 成都高新 · 智慧医疗平台</span>
@@ -1564,6 +1564,15 @@ addMsg = function(role, text, isHtml) {
 if (synth) { synth.getVoices(); synth.onvoiceschanged = () => synth.getVoices(); }
 
 // ==================== Init ====================
+function updateLiveTime() {
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2,'0');
+  const m = now.getMinutes().toString().padStart(2,'0');
+  const timeStr = h + ':' + m;
+  document.querySelectorAll('.live-time').forEach(el => el.textContent = timeStr);
+}
+updateLiveTime();
+setInterval(updateLiveTime, 60000);
 document.getElementById('apiKeyInput').value=getApiConfig().key;
 document.getElementById('apiUrlInput').value=getApiConfig().url;
 applyModeVisuals();
