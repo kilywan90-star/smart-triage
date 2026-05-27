@@ -1195,9 +1195,10 @@ async function callAI(messages){
 
 function sendChip(el){sendMsg(el.textContent);}
 
-// ==================== Voice ====================
+// ==================== Voice (FunASR + Browser Fallback) ====================
 let voiceMode = false;
-let recognition = null;
+let mediaRecorder = null;
+let audioChunks = [];
 let synth = window.speechSynthesis;
 let isRecording = false;
 
@@ -1225,161 +1226,191 @@ function toggleVoiceMode() {
   }
 }
 
+function getAsrApiKey() {
+  return localStorage.getItem('ds_api_key') || '';
+}
+
+function getAsrModel() {
+  // FunASR models via DashScope: paraformer-v2 (fast), paraformer-v1 (stable)
+  return 'paraformer-v2';
+}
+
+async function funasrRecognize(audioBlob) {
+  const apiKey = getAsrApiKey();
+  if (!apiKey) throw new Error('No API key');
+
+  // Use DashScope speech recognition API
+  const formData = new FormData();
+  formData.append('model', getAsrModel());
+  formData.append('file', audioBlob, 'recording.wav');
+  formData.append('language_hints', 'zh');
+
+  const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+    body: formData
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`ASR API ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  return data.text || '';
+}
+
 function startRecording() {
   if (isRecording) return;
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    alert('您的浏览器不支持语音识别。请使用Chrome浏览器。');
-    return;
-  }
+  const hasFunASR = !!getAsrApiKey();
+  const useBrowserFallback = !hasFunASR;
 
-  recognition = new SpeechRecognition();
-  recognition.lang = 'zh-CN';
-  recognition.interimResults = true;
-  recognition.continuous = true;
-  recognition.maxAlternatives = 1;
+  if (useBrowserFallback) {
+    // Browser Web Speech API fallback
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('请配置 DeepSeek API Key（百炼API）以使用语音识别功能，或使用 Chrome 浏览器。');
+      return;
+    }
 
-  let finalText = '';
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.maxAlternatives = 1;
 
-  recognition.onresult = function(event) {
-    let interim = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        finalText += event.results[i][0].transcript;
-      } else {
-        interim += event.results[i][0].transcript;
+    let finalText = '';
+    recognition.onresult = function(event) {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) { finalText += event.results[i][0].transcript; }
+        else { interim += event.results[i][0].transcript; }
       }
-    }
-    document.getElementById('recHint').textContent = finalText + interim || '正在聆听...';
-  };
+      document.getElementById('recHint').textContent = finalText + interim || '正在聆听...';
+    };
+    recognition.onerror = function(event) {
+      if (event.error === 'not-allowed') alert('请在浏览器设置中允许麦克风权限');
+      stopRecording(false);
+    };
+    recognition.onend = function() {
+      if (isRecording) recognition.start();
+    };
 
-  recognition.onerror = function(event) {
-    console.error('Speech error:', event.error);
-    if (event.error === 'not-allowed') {
-      alert('请在浏览器设置中允许麦克风权限，然后刷新页面。');
-    }
-    stopRecording(false);
-  };
+    recognition.start();
+    isRecording = true;
+    document.getElementById('recordingOverlay').classList.add('show');
+    document.getElementById('btnMic').classList.add('recording');
+    document.getElementById('recHint').textContent = '正在聆听...（浏览器ASR）';
+    // Store ref for stop
+    window._browserRecognition = recognition;
+  } else {
+    // FunASR via DashScope: record audio with MediaRecorder
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      audioChunks = [];
 
-  recognition.onend = function() {
-    if (isRecording) recognition.start(); // keep going until user stops
-  };
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
 
-  recognition.start();
-  isRecording = true;
-  document.getElementById('recordingOverlay').classList.add('show');
-  document.getElementById('btnMic').classList.add('recording');
-  document.getElementById('recHint').textContent = '正在聆听...';
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const hint = document.getElementById('recHint');
+        hint.textContent = 'FunASR 识别中...';
+
+        try {
+          const text = await funasrRecognize(audioBlob);
+          if (text) {
+            document.getElementById('userInput').value = text;
+            if (voiceMode) setTimeout(() => sendMsg(), 200);
+          } else {
+            hint.textContent = '未识别到语音，请重试';
+          }
+        } catch (err) {
+          console.error('FunASR error:', err);
+          hint.textContent = '识别失败，请重试';
+        } finally {
+          document.getElementById('recordingOverlay').classList.remove('show');
+          document.getElementById('btnMic').classList.remove('recording');
+          hint.textContent = '请说出您的症状';
+        }
+      };
+
+      mediaRecorder.start();
+      isRecording = true;
+      document.getElementById('recordingOverlay').classList.add('show');
+      document.getElementById('btnMic').classList.add('recording');
+      document.getElementById('recHint').textContent = '正在聆听...（FunASR）';
+    }).catch(err => {
+      console.error('Mic access error:', err);
+      alert('无法访问麦克风，请在浏览器设置中允许麦克风权限。');
+    });
+  }
 }
 
 function stopRecording(shouldSend = true) {
   if (!isRecording) return;
   isRecording = false;
 
-  if (recognition) {
-    recognition.onend = null;
-    recognition.stop();
-    recognition = null;
+  // FunASR mode: stop MediaRecorder
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return; // the onstop handler will handle everything
+  }
+
+  // Browser fallback mode
+  if (window._browserRecognition) {
+    window._browserRecognition.onend = null;
+    window._browserRecognition.stop();
+    window._browserRecognition = null;
   }
 
   document.getElementById('recordingOverlay').classList.remove('show');
   document.getElementById('btnMic').classList.remove('recording');
 
   const text = document.getElementById('recHint').textContent.trim();
-  if (text && text !== '正在聆听...' && shouldSend) {
+  if (text && text !== '正在聆听...' && text !== '正在聆听...（浏览器ASR）' && shouldSend) {
     document.getElementById('userInput').value = text;
-    if (voiceMode) {
-      setTimeout(() => sendMsg(), 300);
-    }
+    if (voiceMode) setTimeout(() => sendMsg(), 300);
   }
   document.getElementById('recHint').textContent = '请说出您的症状';
 }
 
+// TTS (unchanged from before, kept as-is)
 function speakText(text) {
   if (!synth) return;
   synth.cancel();
-
   const div = document.createElement('div');
   div.innerHTML = text;
   let cleanText = (div.textContent || div.innerText || '')
     .replace(/[🔴🟠🟡🟢🔵🏥📍📞💡📋💳🔬💉🩹🤖🩺🧠🫀🫁🦴👶🤰🦷👁️👂💧🧬🚑🌿💊🏃🔍⭐☎️📱⌨️🎤🎙️➤★☆⚡]/g, '')
-    .replace(/[●○$]/g, '')
-    .replace(/Ⅰ级|Ⅱ级|Ⅲ级|Ⅳa|Ⅳb|≤|→|—/g, '')
-    .trim();
-
+    .replace(/[●○$]/g, '').replace(/Ⅰ级|Ⅱ级|Ⅲ级|Ⅳa|Ⅳb|≤|→|—/g, '').trim();
   if (!cleanText || cleanText.length < 2) return;
-
-  // Load voices if not yet loaded
   let voices = synth.getVoices();
-  if (voices.length === 0) {
-    voices = synth.getVoices(); // retry
-  }
-
-  // Priority: natural Chinese voices by quality
-  const preferredVoices = [
-    'Google 普通话', 'Google 中文',             // Chrome Android - most natural
-    'Microsoft Xiaoxiao', 'Microsoft Yunyang', 'Microsoft Xiaohan', // Win11 - neural
-    'Tingting', 'Sin-Ji',                        // macOS premium
-    'Mei-Jia',                                    // macOS Cantonese alt
-    'Microsoft Yaoyao', 'Microsoft Kangkang',    // Win10 fallback
-    'Microsoft Huihui',                           // Win10 desktop
-  ];
-
-  let bestVoice = null;
-  for (const pref of preferredVoices) {
-    bestVoice = voices.find(v => v.name.includes(pref) && (v.lang.startsWith('zh') || v.lang.startsWith('yue')));
-    if (bestVoice) break;
-  }
-  // Fallback: any Chinese voice
-  if (!bestVoice) bestVoice = voices.find(v => v.lang.startsWith('zh'));
-
-  // Split into sentences for natural pauses
-  const sentences = cleanText.split(/[。！？\n]+/).filter(s => s.trim().length > 0);
-  const totalChars = cleanText.length;
-
-  if (totalChars > 300 || sentences.length > 4) {
-    // Long text: only speak first 2-3 sentences as summary
-    const summary = sentences.slice(0, 3).join('。') + '。';
-    speakSingle(summary, bestVoice, 1.0);
+  if (voices.length === 0) voices = synth.getVoices();
+  const preferred = ['Google 普通话','Google 中文','Microsoft Xiaoxiao','Microsoft Yunyang','Tingting','Sin-Ji','Microsoft Yaoyao','Microsoft Huihui'];
+  let best = null;
+  for (const p of preferred) { best = voices.find(v => v.name.includes(p) && v.lang.startsWith('zh')); if (best) break; }
+  if (!best) best = voices.find(v => v.lang.startsWith('zh'));
+  const sentences = cleanText.split(/[。！？\n]+/).filter(s => s.trim());
+  if (sentences.length > 4 && cleanText.length > 300) {
+    const u = new SpeechSynthesisUtterance(sentences.slice(0,3).join('。')+'。');
+    u.lang='zh-CN'; u.rate=1.0; u.pitch=1.0; u.volume=1.0; if(best)u.voice=best;
+    synth.speak(u);
   } else {
-    // Speak full text with sentence-level pacing
-    speakSentencesWithPause(sentences, bestVoice, 0);
+    speakSentencesWithPause(sentences, best, 0);
   }
 }
-
 function speakSingle(text, voice, rate) {
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'zh-CN';
-  u.rate = rate;
-  u.pitch = 1.0;
-  u.volume = 1.0;
-  if (voice) u.voice = voice;
-  synth.speak(u);
+  const u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=rate;u.pitch=1.0;u.volume=1.0;if(voice)u.voice=voice;synth.speak(u);
 }
-
 function speakSentencesWithPause(sentences, voice, idx) {
   if (idx >= sentences.length) return;
-  const sentence = sentences[idx].trim();
-  if (!sentence) {
-    speakSentencesWithPause(sentences, voice, idx + 1);
-    return;
-  }
-
-  const u = new SpeechSynthesisUtterance(sentence);
-  u.lang = 'zh-CN';
-  u.rate = 0.95;   // slightly slower for natural pace
-  u.pitch = 1.0;
-  u.volume = 1.0;
-  if (voice) u.voice = voice;
-
-  u.onend = function() {
-    // Natural pause between sentences (200ms)
-    setTimeout(() => {
-      speakSentencesWithPause(sentences, voice, idx + 1);
-    }, 200);
-  };
-
+  const s = sentences[idx].trim();
+  if (!s) { speakSentencesWithPause(sentences, voice, idx+1); return; }
+  const u = new SpeechSynthesisUtterance(s);
+  u.lang='zh-CN'; u.rate=0.95; u.pitch=1.0; u.volume=1.0; if(voice)u.voice=voice;
+  u.onend = function() { setTimeout(() => speakSentencesWithPause(sentences, voice, idx+1), 200); };
   synth.speak(u);
 }
 
@@ -1395,12 +1426,7 @@ addMsg = function(role, text, isHtml) {
   }
   return result;
 };
-
-// Preload voices: Chrome loads them asynchronously
-if (synth) {
-  synth.getVoices();
-  synth.onvoiceschanged = () => { synth.getVoices(); };
-}
+if (synth) { synth.getVoices(); synth.onvoiceschanged = () => synth.getVoices(); }
 
 // ==================== Init ====================
 document.getElementById('apiKeyInput').value=getApiConfig().key;
