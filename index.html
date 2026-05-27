@@ -592,6 +592,9 @@ body {
     <label>DeepSeek API Key</label>
     <input type="password" id="apiKeyInput" placeholder="sk-..." onchange="saveSettings()">
     <div class="hint">留空使用离线规则引擎</div>
+    <label>DashScope Key（百炼FunASR语音识别）</label>
+    <input type="password" id="dashscopeKeyInput" placeholder="sk-..." onchange="saveSettings()">
+    <div class="hint">阿里云百炼API Key，用于FunASR语音识别</div>
     <label>API 地址</label>
     <input type="text" id="apiUrlInput" value="https://api.deepseek.com/v1/chat/completions" onchange="saveSettings()">
     <label>模型名称</label>
@@ -684,6 +687,7 @@ function openSettings() {
   document.getElementById('apiKeyInput').value = getApiConfig().key;
   document.getElementById('apiUrlInput').value = getApiConfig().url;
   document.getElementById('modelInput').value = getApiConfig().model;
+  document.getElementById('dashscopeKeyInput').value = localStorage.getItem('dashscope_key')||'';
   updateSettingsBadge();
 }
 function closeSettings() { document.getElementById('settingsOverlay').classList.remove('show'); }
@@ -691,6 +695,7 @@ function saveSettings() {
   localStorage.setItem('ds_api_key', document.getElementById('apiKeyInput').value.trim());
   localStorage.setItem('ds_api_url', document.getElementById('apiUrlInput').value.trim());
   localStorage.setItem('ds_model', document.getElementById('modelInput').value.trim()||'deepseek-v4-flash');
+  localStorage.setItem('dashscope_key', document.getElementById('dashscopeKeyInput').value.trim());
   updateSettingsBadge();
 }
 function getApiConfig() {
@@ -1226,7 +1231,7 @@ function toggleVoiceMode() {
   }
 }
 
-function getAsrApiKey() {
+function getAsrApiKey() { return localStorage.getItem("dashscope_key") || ""; }
   return localStorage.getItem('ds_api_key') || '';
 }
 
