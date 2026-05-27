@@ -1177,19 +1177,43 @@ function rankRecommendations(input) {
   return results.filter(e=>{const k=`${e.hospital.id}|${e.department.k}`;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
 }
 
-// ==================== Follow-up Questions ====================
+// ==================== Follow-up Questions (Structured) ====================
 function generateFollowUp(input, round) {
-  const allQs = [
-    {q:'症状持续多久了？', choices:['刚刚出现(几小时内)','1-3天','3-7天','一周以上','反复发作很久了']},
-    {q:'不适程度大概有几分？', choices:['轻微(1-3分)','中度(4-6分)','严重(7-9分)','无法忍受(10分)']},
-    {q:'有没有其他伴随症状？', choices:['恶心/呕吐','出汗/乏力','头晕/眼花','没有其他症状','不清楚']},
-    {q:'以前有过类似情况吗？', choices:['第一次出现','以前有过但自己好了','有慢性病在吃药','家族有类似病史','没有']},
-    {q:'什么情况会加重或缓解？', choices:['休息后好转','活动后加重','吃饭后加重','吃药能缓解','没有规律']},
-    {q:'方便告诉我年龄段吗？', choices:['儿童(<12岁)','青少年(12-18)','成年人(18-60)','老年人(60岁以上)']},
-    {q:'不适的具体位置？', choices:['固定一个点','整个区域','左右两边都有','说不清楚']},
+  const text = (collectedSymptoms.join(' ') + ' ' + input).toLowerCase();
+
+  // Symptom-specific pain quality questions
+  const painQs = [
+    {q:'疼痛是哪种类型？', choices:['跳着痛/搏动性','胀痛/压迫感','针刺样/电击样','钝痛/隐隐作痛','说不清楚']},
+    {q:'疼痛有没有向其他部位放射？', choices:['没有放射','向头部/面部','向手臂/肩膀','向背部/腰部','向腿部']},
+    {q:'疼痛是持续性的还是阵发性的？', choices:['持续性','阵发性/一阵一阵','时好时坏','早上重晚上轻','晚上重早上轻']},
   ];
-  const idx = Math.min(round, allQs.length - 1);
-  return allQs[idx] || allQs[0];
+
+  // General structured questions
+  const generalQs = [
+    {q:'症状持续多久了？', choices:['几小时内','1-3天','3-7天','1-4周','一个月以上']},
+    {q:'不适程度打分？', choices:['轻微(1-3分)','中度(4-6分)','严重(7-9分)','无法忍受(10分)']},
+    {q:'有没有伴随以下情况？', choices:['发热/发冷','恶心/呕吐','乏力/出汗','头痛/头晕','没有伴随症状']},
+    {q:'什么情况会加重？', choices:['活动/劳累后','休息时','吃东西后','压力/情绪波动','没有明显规律']},
+    {q:'什么情况能缓解？', choices:['休息后好转','吃药后好转','改变姿势后好转','热敷/按摩后好转','没有缓解方式']},
+    {q:'以前有过类似情况吗？', choices:['第一次出现','以前偶尔有','经常反复发作','有慢性病史','家族有类似情况']},
+    {q:'您的年龄段是？', choices:['儿童(<12岁)','青少年(12-18岁)','成年人(18-60岁)','老年人(60岁以上)']},
+    {q:'不适的具体部位？', choices:['左侧','右侧','中间/正中央','整个区域','不好确定']},
+    {q:'最近是否做过相关检查？', choices:['没做过检查','做过血液检查','做过CT/核磁','做过B超/彩超','做过其他检查']},
+    {q:'目前是否在服用药物？', choices:['没有服药','服用处方药','服用非处方药','服用中药/保健品','不清楚药名']},
+    {q:'有没有过敏史或药物过敏？', choices:['没有过敏','有药物过敏','有食物过敏','有花粉/尘螨过敏','不清楚']},
+  ];
+
+  // Pick: first round = pain quality if pain-related, else general
+  const isPain = /痛|疼|胀|酸|麻|不适/.test(text);
+  let selected;
+  if (isPain && round <= 2) {
+    selected = painQs[Math.min(round, painQs.length - 1)];
+  } else {
+    // Offset by pain questions already asked
+    const offset = isPain ? Math.max(0, round - 2) : round;
+    selected = generalQs[Math.min(offset, generalQs.length - 1)];
+  }
+  return selected || generalQs[0];
 }
 
 function addChoiceButtons(choices, callback) {
