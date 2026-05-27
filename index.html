@@ -255,6 +255,19 @@ body {
   cursor:pointer; background:none; border:none; padding:2px 6px;
 }
 
+/* Choice Buttons */
+.choice-buttons {
+  display:flex; flex-wrap:wrap; gap:6px; padding:6px 0 0 40px; /* 40px = avatar offset */
+}
+.choice-btn {
+  padding:8px 14px; border-radius:18px; border:1px solid #d0e3f5; background:#f0f7ff;
+  font-size:12px; font-weight:600; color:var(--primary); cursor:pointer;
+  transition:all 0.2s; white-space:nowrap; font-family:inherit;
+}
+.choice-btn:active { background:var(--primary); color:#fff; border-color:var(--primary); transform:scale(0.95); }
+.choice-btn.urgent { background:#fff0f0; border-color:#f5c6c6; color:#d94841; }
+.choice-btn.urgent:active { background:#d94841; color:#fff; }
+
 /* ===== Rec Panel (in chat) ===== */
 .rec-panel {
   margin:6px 0; background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
@@ -1020,10 +1033,47 @@ function rankRecommendations(input) {
 
 // ==================== Follow-up Questions ====================
 function generateFollowUp(input, round) {
-  const qs={duration:'请问症状持续多久了？突然出现的还是逐渐加重的？',severity:'如果0-10分给不适程度打分，大概是几分？',accompany:'有没有其他伴随症状？比如恶心、出汗、乏力等？',history:'以前有过类似情况吗？有没有慢性病或正在服药？',trigger:'什么情况会加重或缓解？休息后好转吗？',age:'方便告诉年龄段吗？(儿童/青年/中年/老年)',location:'不适的具体位置在哪里？固定一点还是整个区域？'};
-  const order=['duration','severity','accompany','history','trigger','age','location'];
-  return qs[order[Math.min(round,order.length-1)]]||qs.duration;
+  const allQs = [
+    {q:'症状持续多久了？', choices:['刚刚出现(几小时内)','1-3天','3-7天','一周以上','反复发作很久了']},
+    {q:'不适程度大概有几分？', choices:['轻微(1-3分)','中度(4-6分)','严重(7-9分)','无法忍受(10分)']},
+    {q:'有没有其他伴随症状？', choices:['恶心/呕吐','出汗/乏力','头晕/眼花','没有其他症状','不清楚']},
+    {q:'以前有过类似情况吗？', choices:['第一次出现','以前有过但自己好了','有慢性病在吃药','家族有类似病史','没有']},
+    {q:'什么情况会加重或缓解？', choices:['休息后好转','活动后加重','吃饭后加重','吃药能缓解','没有规律']},
+    {q:'方便告诉我年龄段吗？', choices:['儿童(<12岁)','青少年(12-18)','成年人(18-60)','老年人(60岁以上)']},
+    {q:'不适的具体位置？', choices:['固定一个点','整个区域','左右两边都有','说不清楚']},
+  ];
+  const idx = Math.min(round, allQs.length - 1);
+  return allQs[idx] || allQs[0];
 }
+
+function addChoiceButtons(choices, callback) {
+  const chatArea = document.getElementById('chatArea');
+  const div = document.createElement('div');
+  div.className = 'choice-buttons';
+  choices.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = c;
+    btn.onclick = function() {
+      // Disable all choice buttons in this group
+      div.querySelectorAll('.choice-btn').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+      callback(c);
+    };
+    div.appendChild(btn);
+  });
+  chatArea.appendChild(div);
+  scrollChat();
+}
+
+// Override addMsg to support choice buttons
+const _origAddMsg = addMsg;
+addMsg = function(role, text, isHtml, choices, choiceCb) {
+  const result = _origAddMsg(role, text, isHtml);
+  if (choices && choices.length > 0 && choiceCb) {
+    setTimeout(() => addChoiceButtons(choices, choiceCb), 100);
+  }
+  return result;
+};
 
 // ==================== Recommendation Panel ====================
 function renderRecPanel(input) {
@@ -1159,7 +1209,11 @@ async function sendMsg(text) {
         addMsg('doctor',stripJSON(reply));
         conversation.push({role:'assistant',content:reply});
       }catch(e){
-        addMsg('doctor','让我继续了解：\n\n'+generateFollowUp(msg,questionCount));
+        const fu = generateFollowUp(msg,questionCount);
+        addMsg('doctor','让我继续了解：\n\n'+fu.q, false, fu.choices, (choice) => {
+          document.getElementById('userInput').value = choice;
+          sendMsg();
+        });
       }
     }else{
       conversation.push({role:'user',content:msg});
@@ -1178,8 +1232,11 @@ async function sendMsg(text) {
   }else{
     if(!shouldShow){
       const fu=generateFollowUp(msg,questionCount);
-      const hint=rule?`我初步注意到「${msg.slice(0,10)}」，让我再了解：\n\n${fu}`:`为了更好地帮您分诊：\n\n${fu}`;
-      addMsg('doctor',hint);
+      const hint=rule?`我初步注意到「${msg.slice(0,10)}」，让我再了解：\n\n${fu.q}`:`为了更好地帮您分诊：\n\n${fu.q}`;
+      addMsg('doctor',hint, false, fu.choices, (choice) => {
+        document.getElementById('userInput').value = choice;
+        sendMsg();
+      });
     }else{
       if(isEmerg)addMsg('doctor',`🔴 根据${questionCount}轮问诊，这是紧急情况！请立即就医。`);
       else addMsg('doctor',`已完成${questionCount}轮问诊。为您匹配以下推荐：`);
