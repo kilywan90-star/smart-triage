@@ -1108,33 +1108,76 @@ function showSlip(hospId, deptName, input) {
   const rule=triageByRules(input);
   const urg=rule?.urg||'green-b';
   const um={
-    red:{t:'🔴 Ⅰ级·即刻',c:'urg-red',wait:'即刻抢救',color:'#c5221f'},
-    orange:{t:'🟠 Ⅱ级·急重',c:'urg-red',wait:'≤15分钟',color:'#e37400'},
-    yellow:{t:'🟡 Ⅲ级·急症',c:'urg-yellow',wait:'≤30分钟',color:'#92400e'},
-    'green-a':{t:'🟢 Ⅳa·亚急',c:'urg-green',wait:'≤2小时',color:'#137333'},
-    'green-b':{t:'🔵 Ⅳb·非急',c:'urg-green',wait:'≤4小时',color:'#1a7ad9'},
-    green:{t:'🟢 常规',c:'urg-green',wait:'约15-30分钟',color:'#137333'}
+    red:{t:'Ⅰ级·即刻',c:'urg-red',wait:'即刻抢救',color:'#c5221f',bg:'#fde8e8'},
+    orange:{t:'Ⅱ级·急重',c:'urg-red',wait:'≤15分钟',color:'#e37400',bg:'#fff4e8'},
+    yellow:{t:'Ⅲ级·急症',c:'urg-yellow',wait:'≤30分钟',color:'#92400e',bg:'#fffbeb'},
+    'green-a':{t:'Ⅳa·亚急',c:'urg-green',wait:'≤2小时',color:'#137333',bg:'#e6f4ea'},
+    'green-b':{t:'Ⅳb·非急',c:'urg-green',wait:'≤4小时',color:'#1a7ad9',bg:'#e8f4fd'},
+    green:{t:'常规',c:'urg-green',wait:'约15-30分钟',color:'#137333',bg:'#e6f4ea'}
   };
   const u=um[urg];
   const now=new Date();
   const sid='TRIAGE-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')+'-'+Math.floor(Math.random()*9000+1000);
+
+  // Build alert text based on urgency
+  const alertText = urg==='red' ? '立即就医！请尽快前往急诊科' :
+    urg==='orange' ? '紧急情况，请尽快前往医院就诊' :
+    urg==='yellow' ? '需要就医，建议尽快安排就诊' : '可择期就诊，建议提前预约';
+
+  // Build suggestion text from rule keywords and tips
+  const deptKW = rule?.kw?.slice(0,3).join('、') || d.n;
+  const checkItems = urg==='red' ? ['立即前往急诊科','拨打120或由家人护送','不要自行驾车','带上正在服用的药物'] :
+    urg==='orange' ? ['尽快前往医院就诊','建议家属陪同','带好身份证和医保卡','检查前可能需要空腹'] :
+    ['提前预约挂号','带好身份证和医保卡','如需抽血建议空腹','记录症状变化情况'];
+  const checkHtml = checkItems.map(c => `<div style="font-size:12px;color:#555;padding:3px 0;">· ${c}</div>`).join('');
+
   document.getElementById('slipCard').innerHTML=`
     <div class="slip-handle"></div>
-    <div class="slip-header"><h2>🏥 智能导诊建议单</h2><div style="font-size:10px;color:#9ca3af;margin-top:4px;">${sid} | ${now.toLocaleString('zh-CN')}</div></div>
-    <div class="slip-body">
-      <div class="slip-row"><span class="sl">推荐科室</span><span class="sv">${d.n}</span></div>
-      <div class="slip-row"><span class="sl">就诊医院</span><span class="sv">${h.name}</span></div>
-      <div class="slip-row"><span class="sl">医院等级</span><span class="sv">${h.level}</span></div>
-      <div class="slip-row"><span class="sl">医院地址</span><span class="sv">${h.addr}</span></div>
-      <div class="slip-row"><span class="sl">联系电话</span><span class="sv">${h.tel}</span></div>
-      <div class="slip-row"><span class="sl">推荐医生</span><span class="sv">${d.dr.join(' / ')}</span></div>
-      <div class="slip-row"><span class="sl">科室专长</span><span class="sv">${d.d}</span></div>
-      <div class="slip-row"><span class="sl">紧急程度</span><span class="sv"><span class="urg-badge ${u.c}">${u.t}</span></span></div>
-      <div class="slip-row"><span class="sl">处理时限</span><span class="sv">${u.wait}</span></div>
-      <div class="slip-row"><span class="sl">就诊提示</span><span class="sv">${rule?.tips||'携带身份证/医保卡'}</span></div>
-      <div class="slip-row"><span class="sl">预估等候</span><span class="sv">${urg==='red'?'优先接诊':urg==='yellow'?'约30-60分钟':'约15-30分钟'}</span></div>
+    <div class="slip-header"><h2>智能导诊建议</h2><div style="font-size:10px;opacity:0.7;margin-top:4px;">${sid} | ${now.toLocaleString('zh-CN')}</div></div>
+    <div class="slip-body" style="padding:0 22px;">
+
+      <!-- Urgency Banner -->
+      <div style="background:${u.bg};border-left:4px solid ${u.color};padding:12px 16px;margin:14px 0;border-radius:0 8px 8px 0;">
+        <div style="font-size:11px;color:${u.color};font-weight:700;">处理时限：${u.wait}</div>
+        <div style="font-size:15px;font-weight:700;color:${u.color};margin-top:2px;">${alertText}</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">${rule?.tips||''}</div>
+      </div>
+
+      <!-- Main Recommendation -->
+      <div style="text-align:center;padding:8px 0 12px;">
+        <div style="font-size:22px;font-weight:700;color:#1a7ad9;">${d.n}</div>
+        <div style="font-size:14px;color:#333;margin-top:4px;">${h.name} · ${h.level}</div>
+        <div style="font-size:11px;color:#999;margin-top:2px;">${h.addr}</div>
+      </div>
+
+      <!-- Initial Consideration -->
+      <div style="background:#f8faff;border-radius:10px;padding:12px 14px;margin:8px 0;">
+        <div style="font-size:13px;font-weight:700;color:#1a7ad9;margin-bottom:6px;">初步考虑</div>
+        <div style="font-size:12px;color:#555;line-height:1.6;">根据您描述的${deptKW}等症状，初步考虑与${d.n}相关疾病可能。${d.d}。</div>
+      </div>
+
+      <!-- Doctor Info -->
+      <div style="background:#f5fdf6;border-radius:10px;padding:12px 14px;margin:8px 0;">
+        <div style="font-size:13px;font-weight:700;color:#137333;margin-bottom:6px;">推荐医生</div>
+        <div style="font-size:13px;color:#333;line-height:1.6;">${d.dr.join('&nbsp;&nbsp;/&nbsp;&nbsp;')}</div>
+        <div style="font-size:11px;color:#999;margin-top:2px;">${d.d}</div>
+      </div>
+
+      <!-- When to See Doctor -->
+      <div style="background:#fffbf0;border-radius:10px;padding:12px 14px;margin:8px 0;">
+        <div style="font-size:13px;font-weight:700;color:#e37400;margin-bottom:6px;">需就医检查的情况</div>
+        ${checkHtml}
+      </div>
+
+      <!-- Hospital Info Compact -->
+      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:10px 14px;margin:8px 0;">
+        <div style="font-size:11px;color:#999;display:flex;justify-content:space-between;">
+          <span>${h.level}</span><span>${h.tel}</span>
+        </div>
+      </div>
+
     </div>
-    <div class="slip-actions"><button class="btn-outline" onclick="closeSlip()">关闭</button><button class="btn-primary" onclick="showRegGuide('${h.id}','${d.n.replace(/'/g,"\\'")}')">📋 挂号引导</button></div>`;
+    <div class="slip-actions"><button class="btn-outline" onclick="closeSlip()">关闭</button><button class="btn-primary" onclick="showRegGuide('${h.id}','${d.n.replace(/'/g,"\\'")}')">挂号引导</button></div>`;
   document.getElementById('slipModal').style.display='flex';
 }
 function closeSlip(){document.getElementById('slipModal').style.display='none';}
