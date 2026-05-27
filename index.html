@@ -1423,74 +1423,80 @@ function showSlip(hospId, deptName, input) {
   const rule=triageByRules(input);
   const urg=rule?.urg||'green-b';
   const um={
-    red:{t:'Ⅰ级·即刻',c:'urg-red',wait:'即刻抢救',color:'#c5221f',bg:'#fde8e8'},
-    orange:{t:'Ⅱ级·急重',c:'urg-red',wait:'≤15分钟',color:'#e37400',bg:'#fff4e8'},
-    yellow:{t:'Ⅲ级·急症',c:'urg-yellow',wait:'≤30分钟',color:'#92400e',bg:'#fffbeb'},
-    'green-a':{t:'Ⅳa·亚急',c:'urg-green',wait:'≤2小时',color:'#137333',bg:'#e6f4ea'},
-    'green-b':{t:'Ⅳb·非急',c:'urg-green',wait:'≤4小时',color:'#1a7ad9',bg:'#e8f4fd'},
-    green:{t:'常规',c:'urg-green',wait:'约15-30分钟',color:'#137333',bg:'#e6f4ea'}
+    red:{t:'Ⅰ级 即刻',c:'urg-red',wait:'即刻抢救',color:'#c5221f',bg:'#fde8e8',icon:'🔴'},
+    orange:{t:'Ⅱ级 急重',c:'urg-red',wait:'≤15分钟',color:'#e37400',bg:'#fff4e8',icon:'🟠'},
+    yellow:{t:'Ⅲ级 急症',c:'urg-yellow',wait:'≤30分钟',color:'#92400e',bg:'#fffbeb',icon:'🟡'},
+    'green-a':{t:'Ⅳa 亚急',c:'urg-green',wait:'≤2小时',color:'#137333',bg:'#e6f4ea',icon:'🟢'},
+    'green-b':{t:'Ⅳb 非急',c:'urg-green',wait:'≤4小时',color:'#1a7ad9',bg:'#e8f4fd',icon:'🔵'},
+    green:{t:'常规',c:'urg-green',wait:'约15-30分钟',color:'#137333',bg:'#e6f4ea',icon:'🟢'}
   };
   const u=um[urg];
   const now=new Date();
   const sid='TRIAGE-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')+'-'+Math.floor(Math.random()*9000+1000);
 
-  // Build alert text based on urgency
   const alertText = urg==='red' ? '立即就医！请尽快前往急诊科' :
     urg==='orange' ? '紧急情况，请尽快前往医院就诊' :
     urg==='yellow' ? '需要就医，建议尽快安排就诊' : '可择期就诊，建议提前预约';
 
-  // Build suggestion text from rule keywords and tips
   const deptKW = rule?.kw?.slice(0,3).join('、') || d.n;
-  const checkItems = urg==='red' ? ['立即前往急诊科','拨打120或由家人护送','不要自行驾车','带上正在服用的药物'] :
-    urg==='orange' ? ['尽快前往医院就诊','建议家属陪同','带好身份证和医保卡','检查前可能需要空腹'] :
-    ['提前预约挂号','带好身份证和医保卡','如需抽血建议空腹','记录症状变化情况'];
-  const checkHtml = checkItems.map(c => `<div style="font-size:12px;color:#555;padding:3px 0;">· ${c}</div>`).join('');
+  const checkItems = urg==='red' ? [
+    {icon:'🚑',txt:'立即前往急诊科'},
+    {icon:'📞',txt:'拨打120或由家人护送'},
+    {icon:'🚫',txt:'不要自行驾车'},
+    {icon:'💊',txt:'带上正在服用的药物'}
+  ] : urg==='orange' ? [
+    {icon:'🏥',txt:'尽快前往医院就诊'},
+    {icon:'👤',txt:'建议家属陪同'},
+    {icon:'🪪',txt:'带好身份证和医保卡'},
+    {icon:'🩸',txt:'检查前可能需要空腹'}
+  ] : [
+    {icon:'📅',txt:'提前预约挂号'},
+    {icon:'🪪',txt:'带好身份证和医保卡'},
+    {icon:'💉',txt:'如需抽血建议空腹'},
+    {icon:'📝',txt:'记录症状变化情况'}
+  ];
 
   document.getElementById('slipCard').innerHTML=`
     <div class="slip-handle"></div>
     <div class="slip-header"><h2>智能导诊建议</h2><div style="font-size:10px;opacity:0.7;margin-top:4px;">${sid} | ${now.toLocaleString('zh-CN')}</div></div>
-    <div class="slip-body" style="padding:0 22px;">
+    <div class="slip-body" style="padding:0 18px;">
 
       <!-- Urgency Banner -->
-      <div style="background:${u.bg};border-left:4px solid ${u.color};padding:12px 16px;margin:14px 0;border-radius:0 8px 8px 0;">
-        <div style="font-size:11px;color:${u.color};font-weight:700;">处理时限：${u.wait}</div>
-        <div style="font-size:15px;font-weight:700;color:${u.color};margin-top:2px;">${alertText}</div>
-        <div style="font-size:12px;color:#666;margin-top:4px;">${rule?.tips||''}</div>
+      <div style="background:${u.bg};border-left:5px solid ${u.color};padding:12px 16px;margin:12px 0;border-radius:0 10px 10px 0;">
+        <div style="font-size:13px;color:${u.color};font-weight:800;letter-spacing:0.5px;">${u.icon} ${u.t} · ${u.wait}</div>
+        <div style="font-size:16px;font-weight:800;color:${u.color};margin-top:3px;">${alertText}</div>
+        <div style="font-size:11px;color:#666;margin-top:4px;">${rule?.tips||''}</div>
       </div>
 
-      <!-- Main Recommendation -->
-      <div style="text-align:center;padding:8px 0 12px;">
-        <div style="font-size:22px;font-weight:700;color:#1a7ad9;">${d.n}</div>
-        <div style="font-size:14px;color:#333;margin-top:4px;">${h.name} · ${h.level}</div>
-        <div style="font-size:11px;color:#999;margin-top:2px;">${h.addr}</div>
+      <!-- Department - Large centered -->
+      <div style="text-align:center;padding:10px 0 14px;">
+        <div style="font-size:24px;font-weight:800;color:#1a7ad9;letter-spacing:1px;">${d.n}</div>
+        <div style="font-size:13px;font-weight:600;color:#333;margin-top:4px;">${h.name}</div>
+        <div style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#e8f4fd;color:#1a7ad9;margin-top:3px;">${h.level}</div>
+        <div style="font-size:11px;color:#999;margin-top:4px;">📍 ${h.addr}  ·  📞 ${h.tel}</div>
       </div>
 
-      <!-- Initial Consideration -->
-      <div style="background:#f8faff;border-radius:10px;padding:12px 14px;margin:8px 0;">
-        <div style="font-size:13px;font-weight:700;color:#1a7ad9;margin-bottom:6px;">初步考虑</div>
-        <div style="font-size:12px;color:#555;line-height:1.6;">根据您描述的${deptKW}等症状，初步考虑与${d.n}相关疾病可能。${d.d}。</div>
+      <!-- 初步考虑 - Blue card -->
+      <div style="background:#f3f7ff;border-radius:12px;padding:14px 16px;margin:8px 0;border:1px solid #dce8fa;">
+        <div style="font-size:12px;font-weight:800;color:#1a7ad9;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">初步考虑</div>
+        <div style="font-size:13px;color:#333;line-height:1.7;">根据您描述的${deptKW}等症状，初步考虑与<span style="font-weight:800;color:#1a7ad9;">${d.n}</span>相关疾病可能。</div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">${d.d}</div>
       </div>
 
-      <!-- Doctor Info -->
-      <div style="background:#f5fdf6;border-radius:10px;padding:12px 14px;margin:8px 0;">
-        <div style="font-size:13px;font-weight:700;color:#137333;margin-bottom:6px;">推荐医生</div>
-        <div style="font-size:13px;color:#333;line-height:1.6;">${d.dr.join('&nbsp;&nbsp;/&nbsp;&nbsp;')}</div>
-        <div style="font-size:11px;color:#999;margin-top:2px;">${d.d}</div>
+      <!-- 推荐医生 - Green card -->
+      <div style="background:#f2faf5;border-radius:12px;padding:14px 16px;margin:8px 0;border:1px solid #d4efe0;">
+        <div style="font-size:12px;font-weight:800;color:#137333;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">推荐医生</div>
+        <div style="font-size:13px;font-weight:600;color:#222;line-height:1.8;">${d.dr.map(dr => `<span style="background:#fff;padding:4px 10px;border-radius:14px;border:1px solid #d4efe0;display:inline-block;margin:2px 4px 2px 0;">${dr}</span>`).join('')}</div>
       </div>
 
-      <!-- When to See Doctor -->
-      <div style="background:#fffbf0;border-radius:10px;padding:12px 14px;margin:8px 0;">
-        <div style="font-size:13px;font-weight:700;color:#e37400;margin-bottom:6px;">需就医检查的情况</div>
-        ${checkHtml}
+      <!-- 就医建议 - Orange card -->
+      <div style="background:#fffaf5;border-radius:12px;padding:14px 16px;margin:8px 0;border:1px solid #fce8d8;">
+        <div style="font-size:12px;font-weight:800;color:#e37400;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">需就医检查的情况</div>
+        ${checkItems.map(c => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;color:#555;"><span>${c.icon}</span><span style="font-weight:600;color:#333;">${c.txt}</span></div>`).join('')}
       </div>
 
-      <!-- Hospital Info Compact -->
-      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:10px 14px;margin:8px 0;">
-        <div style="font-size:11px;color:#999;display:flex;justify-content:space-between;">
-          <span>${h.level}</span><span>${h.tel}</span>
-        </div>
-      </div>
-
+      <!-- Hospital footer -->
+      <div style="text-align:center;padding:8px 0;font-size:10px;color:#bbb;">${sid}</div>
     </div>
     <div class="slip-actions"><button class="btn-outline" onclick="closeSlip()">关闭</button><button class="btn-primary" onclick="showRegGuide('${h.id}','${d.n.replace(/'/g,"\\'")}')">挂号引导</button></div>`;
   document.getElementById('slipModal').style.display='flex';
