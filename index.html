@@ -1080,6 +1080,22 @@ function stripJSON(text) {
   return text || '抱歉，AI未能生成有效的回复，请根据下方推荐列表选择科室。';
 }
 
+// Parse [选项1][选项2] from AI responses into clickable choices
+function parseChoices(text) {
+  const bracketRe = /\[([^\]]+)\]/g;
+  const choices = [];
+  let m;
+  while ((m = bracketRe.exec(text)) !== null) {
+    const option = m[1].trim();
+    if (option.length > 1 && option.length < 30 && !option.includes('{') && !option.includes('<')) {
+      choices.push(option);
+    }
+  }
+  let cleanText = text.replace(/\[([^\]]+)\]/g, '').replace(/\s+/g, ' ').trim();
+  if (!cleanText) cleanText = '请选择：';
+  return { text: cleanText, choices: choices.slice(0, 6) };
+}
+
 function triageByRules(input) {
   const text = input.toLowerCase(); let bm=null,bs=0;
   for (const r of TRIAGE_RULES) { let s=0; for (const k of r.kw) { if(text.includes(k)) s+=k.length; } if(s>bs){bs=s;bm=r;} }
@@ -1329,9 +1345,14 @@ async function sendMsg(text) {
       conversation.push({role:'user',content:msg});
       try{
         const remaining=MIN_QUESTIONS-questionCount;
-        const sysPrompt=`你是医院分诊医生。还需至少${remaining}个问题才能给出结论。请提一个简短追问（只提问，不给建议，不要输出JSON）。`;
+        const sysPrompt=`你是医院分诊医生。还需至少${remaining}个问题才能给出结论。请提一个简短追问，并在末尾用 [选项1][选项2][选项3] 格式给出3-5个可选答案，方便用户点击选择。不要输出JSON。`;
         const reply=await callAI([{role:'system',content:sysPrompt},...conversation]);
-        addMsg('doctor',stripJSON(reply));
+        const cleaned = stripJSON(reply);
+        const parsed = parseChoices(cleaned);
+        addMsg('doctor', parsed.text, false, parsed.choices, (choice) => {
+          document.getElementById('userInput').value = choice;
+          sendMsg();
+        });
         conversation.push({role:'assistant',content:reply});
       }catch(e){
         const fu = generateFollowUp(msg,questionCount);
@@ -1345,8 +1366,12 @@ async function sendMsg(text) {
       conversation.push({role:'system',content:'请用自然语言给出分诊结论和建议，不要输出JSON或代码块。格式：简要总结病情→推荐科室→就医建议。'});
       try{
         const reply=await callAI(conversation);
-        const cleanReply=stripJSON(reply);
-        addMsg('doctor',cleanReply);
+        const cleaned = stripJSON(reply);
+        const parsed = parseChoices(cleaned);
+        addMsg('doctor', parsed.text, false, parsed.choices.length > 0 ? parsed.choices : null, parsed.choices.length > 0 ? (choice) => {
+          document.getElementById('userInput').value = choice;
+          sendMsg();
+        } : null);
         renderRecPanel(msg);
         const results=rankRecommendations(msg);
         if(results.length>0)setTimeout(()=>showSlip(results[0].hospital.id,results[0].department.n,msg),400);
