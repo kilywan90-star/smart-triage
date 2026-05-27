@@ -1316,20 +1316,67 @@ function generateFollowUp(input, round) {
 
 function addChoiceButtons(choices, callback) {
   const chatArea = document.getElementById('chatArea');
-  const div = document.createElement('div');
-  div.className = 'choice-buttons';
+  const lastDoctorBubble = chatArea.querySelector('.msg.doctor:last-of-type .msg-bubble');
+  if (!lastDoctorBubble) return;
+
+  const isMulti = choices.length > 3; // 4+ options = multi-select mode
+  let selected = [];
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;';
+
   choices.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'choice-btn';
     btn.textContent = c;
-    btn.onclick = function() {
-      // Disable all choice buttons in this group
-      div.querySelectorAll('.choice-btn').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
-      callback(c);
-    };
-    div.appendChild(btn);
+    btn.style.cssText = 'padding:7px 13px;border-radius:16px;border:1px solid #d0e3f5;background:#f0f7ff;font-size:12px;font-weight:600;color:#1a7ad9;cursor:pointer;transition:all 0.15s;white-space:nowrap;font-family:inherit;';
+    btn.onpointerdown = function(e) { e.preventDefault(); };
+
+    if (isMulti) {
+      // Multi-select mode
+      btn.onclick = function() {
+        const idx = selected.indexOf(c);
+        if (idx >= 0) {
+          selected.splice(idx, 1);
+          btn.style.background = '#f0f7ff';
+          btn.style.color = '#1a7ad9';
+          btn.style.borderColor = '#d0e3f5';
+        } else {
+          selected.push(c);
+          btn.style.background = '#1a7ad9';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#1a7ad9';
+        }
+        // Show/hide confirm button
+        const confirmBtn = wrap.querySelector('.choice-confirm');
+        if (confirmBtn) confirmBtn.style.display = selected.length > 0 ? '' : 'none';
+      };
+    } else {
+      // Single-select: tap = auto-send
+      btn.onclick = function() {
+        wrap.querySelectorAll('button').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+        callback(c);
+      };
+    }
+
+    wrap.appendChild(btn);
   });
-  chatArea.appendChild(div);
+
+  if (isMulti) {
+    // Add confirm button
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'choice-btn choice-confirm';
+    confirmBtn.textContent = '确定 ✓';
+    confirmBtn.style.cssText = 'padding:7px 14px;border-radius:16px;border:none;background:#1a7ad9;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:none;font-family:inherit;';
+    confirmBtn.onclick = function() {
+      if (selected.length === 0) return;
+      wrap.querySelectorAll('button').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+      callback(selected.join('，'));
+    };
+    wrap.appendChild(confirmBtn);
+  }
+
+  lastDoctorBubble.appendChild(wrap);
   scrollChat();
 }
 
