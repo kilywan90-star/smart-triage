@@ -810,10 +810,24 @@ function isApiReady() { return !!getApiConfig().key; }
 function initChat() {
   const area = document.getElementById('chatArea');
   area.innerHTML = '';
-  const msg = avatarMode === 'digital'
-    ? '您好，我是 AI数字医生·分身。我会通过3轮问诊了解您的病情，然后精准推荐科室和医生。请描述您的症状。'
-    : '您好，我是 AI 数字医生。请描述您的症状，我会通过3轮问诊为您推荐成都高新区最匹配的科室和医生。';
-  addSystemMsg(msg);
+
+  const cloneName = localStorage.getItem('clone_name')||'';
+  const cloneTitle = localStorage.getItem('clone_title')||'';
+  const isDigital = avatarMode === 'digital';
+
+  // Build personalized intro
+  let greeting;
+  if (cloneName) {
+    const title = cloneTitle || '全科医师';
+    const expertise = cloneTitle ? `擅长${cloneTitle}相关疾病的诊疗。` : '擅长常见病、多发病的智能导诊与分诊。';
+    greeting = `您好，我是 ${cloneName}医生的数字分身，${title}。\n\n${expertise}\n\n我可以帮您：\n· 症状分析与科室推荐\n· 挂号引导与就诊准备\n· 检查预约与缴费指引\n\n请点击下方症状按钮描述您的情况，或按住麦克风直接语音对话。`;
+  } else if (isDigital) {
+    greeting = '您好，我是 AI数字医生·分身。我已沉淀大量门诊病历数据，擅长智能导诊分诊。\n\n我可以帮您：\n· 症状分析与科室推荐\n· 挂号引导与就诊准备\n· 检查预约与缴费指引\n\n请点击下方按钮描述症状，或按住🎤直接语音对话。';
+  } else {
+    greeting = '您好，我是 AI 数字医生。\n\n我可以帮您：\n· 症状分析与科室推荐\n· 挂号引导与就诊准备\n· 检查预约与缴费指引\n\n请点击下方症状按钮描述您的情况，或按住🎤直接语音对话。';
+  }
+
+  addSystemMsg(greeting);
   resetConsultation();
   applyModeVisuals();
 }
